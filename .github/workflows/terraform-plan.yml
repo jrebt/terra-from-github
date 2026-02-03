@@ -5,9 +5,6 @@ on:
   pull_request:
     branches:
       - main
-    paths:
-      - 'terraform/**'
-      - '.github/workflows/terraform-*.yml'
 
 permissions:
   contents: read
@@ -18,9 +15,6 @@ jobs:
   terraform-plan:
     name: 'Terraform Plan'
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./terraform
 
     steps:
       - name: Checkout

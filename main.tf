@@ -25,7 +25,7 @@ resource "google_compute_firewall" "allow_ssh" {
   }
 
   source_ranges = ["0.0.0.0/0"]  # ⚠️ Cambiar por tu IP en producción
-  target_tags   = ["ssh"]
+  target_tags   = ["ssh", "http"]
 }
 
 # Instancia de VM (free tier eligible)
@@ -58,3 +58,4 @@ resource "google_compute_instance" "vm_instance" {
     echo "<h1>Hola desde Terraform en GCP!</h1>" > /var/www/html/index.html
   EOF
 }
+

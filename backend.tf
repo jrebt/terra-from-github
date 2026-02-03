@@ -9,8 +9,8 @@ terraform {
     }
   }
   
-  backend "gcs" {
-    bucket = "mi-proyecto-terraform-tfstate"  # Cambia por tu bucket
-    prefix = "terraform/state"
-  }
+#  backend "gcs" {
+#    bucket = "mi-proyecto-terraform-tfstate"  # Cambia por tu bucket
+#    prefix = "terraform/state"
+#  }
 }
