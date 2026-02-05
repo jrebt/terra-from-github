@@ -33,10 +33,10 @@ jobs:
           terraform_version: 1.7.0
           terraform_wrapper: false
 
-      - name: Clean Terraform cache
+      - name: 🔄 Clean & Reset Terraform State (Fix Provider Error)
         run: |
-          rm -rf .terraform
-          rm -f .terraform.lock.hcl
+          rm -rf .terraform .terraform.lock.hcl terraform.tfstate* override.tfstate*
+          echo "✅ Terraform cache and stale state cleared"
 
       - name: Terraform Init
         run: terraform init
@@ -46,7 +46,7 @@ jobs:
 
       - name: Terraform Plan
         if: github.event.inputs.action == 'plan' || github.event.inputs.action == 'apply'
-        run: terraform plan
+        run: terraform plan -out=tfplan
         env:
           TF_VAR_ovh_endpoint: ${{ secrets.OVH_ENDPOINT }}
           TF_VAR_ovh_application_key: ${{ secrets.OVH_APPLICATION_KEY }}
@@ -60,7 +60,7 @@ jobs:
 
       - name: Terraform Apply
         if: github.event.inputs.action == 'apply'
-        run: terraform apply -auto-approve
+        run: terraform apply tfplan
         env:
           TF_VAR_ovh_endpoint: ${{ secrets.OVH_ENDPOINT }}
           TF_VAR_ovh_application_key: ${{ secrets.OVH_APPLICATION_KEY }}
