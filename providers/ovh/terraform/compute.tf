@@ -1,27 +1,33 @@
-# Obtener la imagen de Ubuntu
-data "openstack_images_image_v2" "ubuntu" {
-  name        = var.image_name
-  most_recent = true
+# Obtener regiones disponibles
+data "ovh_cloud_project_regions" "available" {
+  service_name = var.service_name
 }
 
-# SSH Key pair
-resource "openstack_compute_keypair_v2" "k3s_keypair" {
-  name       = "${var.cluster_name}-keypair"
-  public_key = var.ssh_public_key
+# Obtener la imagen de Ubuntu
+data "ovh_cloud_project_image" "ubuntu" {
+  service_name = var.service_name
+  region       = var.region
+  name         = var.image_name
+}
+
+# SSH Key
+resource "ovh_cloud_project_sshkey" "k3s_keypair" {
+  service_name = var.service_name
+  name         = "${var.cluster_name}-keypair"
+  public_key   = var.ssh_public_key
+  region       = var.region
 }
 
 # Master nodes
-resource "openstack_compute_instance_v2" "k3s_master" {
-  count           = var.master_count
-  name            = "${var.cluster_name}-master-${count.index + 1}"
-  flavor_name     = var.flavor_master
-  image_id        = data.openstack_images_image_v2.ubuntu.id
-  key_pair        = openstack_compute_keypair_v2.k3s_keypair.name
-  security_groups = [openstack_networking_secgroup_v2.k3s_secgroup.name]
+resource "ovh_cloud_project_instance" "k3s_master" {
+  count        = var.master_count
+  service_name = var.service_name
+  name         = "${var.cluster_name}-master-${count.index + 1}"
+  region       = var.region
+  flavor_name  = var.flavor_master
+  image_id     = data.ovh_cloud_project_image.ubuntu.id
 
-  network {
-    uuid = openstack_networking_network_v2.k3s_network.id
-  }
+  ssh_key_public = ovh_cloud_project_sshkey.k3s_keypair.public_key
 
   user_data = <<-EOF
     #cloud-config
@@ -34,37 +40,18 @@ resource "openstack_compute_instance_v2" "k3s_master" {
     runcmd:
       - echo "Master node ${count.index + 1} initialized" > /var/log/cloud-init-done.log
   EOF
-
-  metadata = {
-    role         = "master"
-    cluster_name = var.cluster_name
-  }
-}
-
-# Floating IPs para masters
-resource "openstack_networking_floatingip_v2" "k3s_master_fip" {
-  count = var.master_count
-  pool  = "Ext-Net"
-}
-
-resource "openstack_compute_floatingip_associate_v2" "k3s_master_fip_assoc" {
-  count       = var.master_count
-  floating_ip = openstack_networking_floatingip_v2.k3s_master_fip[count.index].address
-  instance_id = openstack_compute_instance_v2.k3s_master[count.index].id
 }
 
 # Worker nodes
-resource "openstack_compute_instance_v2" "k3s_worker" {
-  count           = var.worker_count
-  name            = "${var.cluster_name}-worker-${count.index + 1}"
-  flavor_name     = var.flavor_worker
-  image_id        = data.openstack_images_image_v2.ubuntu.id
-  key_pair        = openstack_compute_keypair_v2.k3s_keypair.name
-  security_groups = [openstack_networking_secgroup_v2.k3s_secgroup.name]
+resource "ovh_cloud_project_instance" "k3s_worker" {
+  count        = var.worker_count
+  service_name = var.service_name
+  name         = "${var.cluster_name}-worker-${count.index + 1}"
+  region       = var.region
+  flavor_name  = var.flavor_worker
+  image_id     = data.ovh_cloud_project_image.ubuntu.id
 
-  network {
-    uuid = openstack_networking_network_v2.k3s_network.id
-  }
+  ssh_key_public = ovh_cloud_project_sshkey.k3s_keypair.public_key
 
   user_data = <<-EOF
     #cloud-config
@@ -76,21 +63,52 @@ resource "openstack_compute_instance_v2" "k3s_worker" {
     runcmd:
       - echo "Worker node ${count.index + 1} initialized" > /var/log/cloud-init-done.log
   EOF
-
-  metadata = {
-    role         = "worker"
-    cluster_name = var.cluster_name
-  }
 }
 
-# Floating IPs para workers
-resource "openstack_networking_floatingip_v2" "k3s_worker_fip" {
-  count = var.worker_count
-  pool  = "Ext-Net"
+# Abrir puertos necesarios (Security Group)
+resource "ovh_cloud_project_instance_security_group" "k3s_secgroup" {
+  service_name = var.service_name
+  name         = "${var.cluster_name}-secgroup"
+  description  = "Security group for K3s cluster"
+  region       = var.region
 }
 
-resource "openstack_compute_floatingip_associate_v2" "k3s_worker_fip_assoc" {
-  count       = var.worker_count
-  floating_ip = openstack_networking_floatingip_v2.k3s_worker_fip[count.index].address
-  instance_id = openstack_compute_instance_v2.k3s_worker[count.index].id
+resource "ovh_cloud_project_instance_security_group_rule" "ssh" {
+  service_name       = var.service_name
+  security_group_id  = ovh_cloud_project_instance_security_group.k3s_secgroup.id
+  direction          = "ingress"
+  protocol           = "tcp"
+  port_range_min     = 22
+  port_range_max     = 22
+  ip_range           = "0.0.0.0/0"
+}
+
+resource "ovh_cloud_project_instance_security_group_rule" "k3s_api" {
+  service_name       = var.service_name
+  security_group_id  = ovh_cloud_project_instance_security_group.k3s_secgroup.id
+  direction          = "ingress"
+  protocol           = "tcp"
+  port_range_min     = 6443
+  port_range_max     = 6443
+  ip_range           = "0.0.0.0/0"
+}
+
+resource "ovh_cloud_project_instance_security_group_rule" "http" {
+  service_name       = var.service_name
+  security_group_id  = ovh_cloud_project_instance_security_group.k3s_secgroup.id
+  direction          = "ingress"
+  protocol           = "tcp"
+  port_range_min     = 80
+  port_range_max     = 80
+  ip_range           = "0.0.0.0/0"
+}
+
+resource "ovh_cloud_project_instance_security_group_rule" "https" {
+  service_name       = var.service_name
+  security_group_id  = ovh_cloud_project_instance_security_group.k3s_secgroup.id
+  direction          = "ingress"
+  protocol           = "tcp"
+  port_range_min     = 443
+  port_range_max     = 443
+  ip_range           = "0.0.0.0/0"
 }
