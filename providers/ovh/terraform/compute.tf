@@ -1,21 +1,19 @@
-# Obtener regiones disponibles
+# Obtener lista de regiones disponibles
 data "ovh_cloud_project_regions" "available" {
   service_name = var.service_name
+  has_services_up = ["instance"]
 }
 
-# Obtener la imagen de Ubuntu
-data "ovh_cloud_project_image" "ubuntu" {
+# Obtener flavors disponibles (tipos de instancia)
+data "ovh_cloud_project_capabilities_containerregistry_filter" "registry_capabilities" {
   service_name = var.service_name
+  plan_name    = "SMALL"
   region       = var.region
-  name         = var.image_name
 }
 
-# SSH Key
-resource "ovh_cloud_project_sshkey" "k3s_keypair" {
+# SSH Key para acceder a las instancias
+resource "ovh_cloud_project_user_s3_credential" "k3s_keypair" {
   service_name = var.service_name
-  name         = "${var.cluster_name}-keypair"
-  public_key   = var.ssh_public_key
-  region       = var.region
 }
 
 # Master nodes
@@ -25,11 +23,15 @@ resource "ovh_cloud_project_instance" "k3s_master" {
   name         = "${var.cluster_name}-master-${count.index + 1}"
   region       = var.region
   flavor_name  = var.flavor_master
-  image_id     = data.ovh_cloud_project_image.ubuntu.id
+  image_name   = var.image_name
 
-  ssh_key_public = ovh_cloud_project_sshkey.k3s_keypair.public_key
+  # SSH keys - usar el formato correcto
+  ssh_key {
+    name       = "${var.cluster_name}-key"
+    public_key = var.ssh_public_key
+  }
 
-  user_data = <<-EOF
+  user_data = base64encode(<<-EOF
     #cloud-config
     package_update: true
     package_upgrade: true
@@ -40,6 +42,7 @@ resource "ovh_cloud_project_instance" "k3s_master" {
     runcmd:
       - echo "Master node ${count.index + 1} initialized" > /var/log/cloud-init-done.log
   EOF
+  )
 }
 
 # Worker nodes
@@ -49,11 +52,14 @@ resource "ovh_cloud_project_instance" "k3s_worker" {
   name         = "${var.cluster_name}-worker-${count.index + 1}"
   region       = var.region
   flavor_name  = var.flavor_worker
-  image_id     = data.ovh_cloud_project_image.ubuntu.id
+  image_name   = var.image_name
 
-  ssh_key_public = ovh_cloud_project_sshkey.k3s_keypair.public_key
+  ssh_key {
+    name       = "${var.cluster_name}-key"
+    public_key = var.ssh_public_key
+  }
 
-  user_data = <<-EOF
+  user_data = base64encode(<<-EOF
     #cloud-config
     package_update: true
     package_upgrade: true
@@ -63,52 +69,5 @@ resource "ovh_cloud_project_instance" "k3s_worker" {
     runcmd:
       - echo "Worker node ${count.index + 1} initialized" > /var/log/cloud-init-done.log
   EOF
-}
-
-# Abrir puertos necesarios (Security Group)
-resource "ovh_cloud_project_instance_security_group" "k3s_secgroup" {
-  service_name = var.service_name
-  name         = "${var.cluster_name}-secgroup"
-  description  = "Security group for K3s cluster"
-  region       = var.region
-}
-
-resource "ovh_cloud_project_instance_security_group_rule" "ssh" {
-  service_name       = var.service_name
-  security_group_id  = ovh_cloud_project_instance_security_group.k3s_secgroup.id
-  direction          = "ingress"
-  protocol           = "tcp"
-  port_range_min     = 22
-  port_range_max     = 22
-  ip_range           = "0.0.0.0/0"
-}
-
-resource "ovh_cloud_project_instance_security_group_rule" "k3s_api" {
-  service_name       = var.service_name
-  security_group_id  = ovh_cloud_project_instance_security_group.k3s_secgroup.id
-  direction          = "ingress"
-  protocol           = "tcp"
-  port_range_min     = 6443
-  port_range_max     = 6443
-  ip_range           = "0.0.0.0/0"
-}
-
-resource "ovh_cloud_project_instance_security_group_rule" "http" {
-  service_name       = var.service_name
-  security_group_id  = ovh_cloud_project_instance_security_group.k3s_secgroup.id
-  direction          = "ingress"
-  protocol           = "tcp"
-  port_range_min     = 80
-  port_range_max     = 80
-  ip_range           = "0.0.0.0/0"
-}
-
-resource "ovh_cloud_project_instance_security_group_rule" "https" {
-  service_name       = var.service_name
-  security_group_id  = ovh_cloud_project_instance_security_group.k3s_secgroup.id
-  direction          = "ingress"
-  protocol           = "tcp"
-  port_range_min     = 443
-  port_range_max     = 443
-  ip_range           = "0.0.0.0/0"
+  )
 }

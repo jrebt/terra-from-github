@@ -1,11 +1,35 @@
+output "master_instances" {
+  description = "Master node details"
+  value = {
+    for idx, instance in ovh_cloud_project_instance.k3s_master : 
+    instance.name => {
+      id         = instance.id
+      ip_address = instance.ip_address
+      status     = instance.status
+    }
+  }
+}
+
+output "worker_instances" {
+  description = "Worker node details"
+  value = {
+    for idx, instance in ovh_cloud_project_instance.k3s_worker : 
+    instance.name => {
+      id         = instance.id
+      ip_address = instance.ip_address
+      status     = instance.status
+    }
+  }
+}
+
 output "master_public_ips" {
   description = "Public IPs of master nodes"
-  value       = ovh_cloud_project_instance.k3s_master[*].ip_address
+  value       = [for instance in ovh_cloud_project_instance.k3s_master : instance.ip_address]
 }
 
 output "worker_public_ips" {
   description = "Public IPs of worker nodes"
-  value       = ovh_cloud_project_instance.k3s_worker[*].ip_address
+  value       = [for instance in ovh_cloud_project_instance.k3s_worker : instance.ip_address]
 }
 
 output "k3s_api_endpoint" {
@@ -17,13 +41,13 @@ output "k3s_api_endpoint" {
 output "ansible_inventory" {
   description = "Ansible inventory in YAML format"
   value = templatefile("${path.module}/templates/inventory.tpl", {
-    master_ips  = zipmap(
-      ovh_cloud_project_instance.k3s_master[*].name,
-      ovh_cloud_project_instance.k3s_master[*].ip_address
-    )
-    worker_ips = zipmap(
-      ovh_cloud_project_instance.k3s_worker[*].name,
-      ovh_cloud_project_instance.k3s_worker[*].ip_address
-    )
+    master_ips  = {
+      for instance in ovh_cloud_project_instance.k3s_master :
+      instance.name => instance.ip_address
+    }
+    worker_ips = {
+      for instance in ovh_cloud_project_instance.k3s_worker :
+      instance.name => instance.ip_address
+    }
   })
 }
