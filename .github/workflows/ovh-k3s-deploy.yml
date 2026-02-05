@@ -1,4 +1,5 @@
 name: 'OVH K3s Cluster Deploy'
+
 on:
   workflow_dispatch:
     inputs:
@@ -10,8 +11,10 @@ on:
           - plan
           - apply
           - destroy
+
 permissions:
   contents: read
+
 jobs:
   terraform:
     name: 'Terraform ${{ github.event.inputs.action }}'
@@ -19,47 +22,30 @@ jobs:
     defaults:
       run:
         working-directory: ./providers/ovh/terraform
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.7.0
+          terraform_wrapper: false
 
-      - name: 💥 NUCLEAR OPTION - Remove ALL Stale State
+      - name: Clean Terraform State (FORCE recreate)
         run: |
-          cd ${{ github.workspace }}/providers/ovh/terraform
-          rm -rf .terraform* terraform.tfstate* override.tfstate* backend* .terraform.rc
-          echo "TF_CLI_ARGS_init=-reconfigure" >> $GITHUB_ENV
-          echo "✅ Nuclear clean complete"
+          rm -rf .terraform .terraform.lock.hcl terraform.tfstate*
+          echo "✅ State cleared - WILL CREATE ALL RESOURCES"
 
       - name: Terraform Init
         run: terraform init -upgrade
-
-      - name: 🧹 Remove Stale Resources from State
-        if: github.event.inputs.action == 'plan' || github.event.inputs.action == 'apply'
-        run: |
-          terraform state rm openstack_compute_keypair_v2.k3s_keypair || true
-          terraform state rm openstack_compute_instance_v2.k3s_master || true
-          terraform state rm openstack_compute_instance_v2.k3s_worker || true
-          terraform state rm openstack_networking_secgroup_v2.k3s_secgroup || true
-          terraform state rm openstack_networking_secgroup_rule_v2.ssh || true
-          terraform state rm openstack_networking_secgroup_rule_v2.k3s_api || true
-          terraform state rm openstack_networking_secgroup_rule_v2.http || true
-          terraform state rm openstack_networking_secgroup_rule_v2.https || true
-          terraform state rm openstack_networking_secgroup_rule_v2.internal || true
-          echo "✅ Stale resources removed from state"
 
       - name: Terraform Validate
         run: terraform validate
 
       - name: Terraform Plan
         if: github.event.inputs.action == 'plan' || github.event.inputs.action == 'apply'
-        id: plan
         run: terraform plan -out=tfplan -detailed-exitcode
         env:
           TF_VAR_ovh_endpoint: ${{ secrets.OVH_ENDPOINT }}
@@ -72,9 +58,11 @@ jobs:
           TF_VAR_openstack_username: ${{ secrets.OPENSTACK_USERNAME }}
           TF_VAR_openstack_password: ${{ secrets.OPENSTACK_PASSWORD }}
 
-      - name: Terraform Apply
+      - name: Terraform Apply (FORCE CREATE ALL)
         if: github.event.inputs.action == 'apply'
-        run: terraform apply tfplan
+        run: |
+          rm -f terraform.tfstate*
+          terraform apply -auto-approve
         env:
           TF_VAR_ovh_endpoint: ${{ secrets.OVH_ENDPOINT }}
           TF_VAR_ovh_application_key: ${{ secrets.OVH_APPLICATION_KEY }}
@@ -88,7 +76,9 @@ jobs:
 
       - name: Generate Ansible Inventory
         if: github.event.inputs.action == 'apply'
-        run: terraform output -raw ansible_inventory > ../../ansible/inventory/hosts.yml
+        run: |
+          mkdir -p ../../ansible/inventory/
+          terraform output -raw ansible_inventory > ../../ansible/inventory/hosts.yml || echo "{}" > ../../ansible/inventory/hosts.yml
 
       - name: Upload Ansible Inventory
         if: github.event.inputs.action == 'apply'
@@ -99,7 +89,9 @@ jobs:
 
       - name: Terraform Destroy
         if: github.event.inputs.action == 'destroy'
-        run: terraform destroy -auto-approve
+        run: |
+          rm -f terraform.tfstate* || true
+          terraform destroy -auto-approve
         env:
           TF_VAR_ovh_endpoint: ${{ secrets.OVH_ENDPOINT }}
           TF_VAR_ovh_application_key: ${{ secrets.OVH_APPLICATION_KEY }}
@@ -119,6 +111,7 @@ jobs:
     defaults:
       run:
         working-directory: ./providers/ovh/ansible
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -141,7 +134,7 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
 
       - name: Wait for instances to be ready
-        run: sleep 90
+        run: sleep 120
 
       - name: Install K3s cluster
         run: ansible-playbook playbooks/k3s-install.yml
