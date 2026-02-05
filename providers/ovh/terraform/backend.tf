@@ -6,5 +6,9 @@ terraform {
       source  = "ovh/ovh"
       version = "~> 0.51"
     }
+    openstack = {
+      source  = "terraform-provider-openstack/openstack"
+      version = "~> 1.54"
+    }
   }
 }

@@ -73,3 +73,6 @@ variable "ssh_public_key" {
   description = "SSH public key for instances"
   type        = string
 }
+
+# Credenciales OpenStack (se obtienen automáticamente del provider OVH)
+# No necesitas añadirlas manualmente si usas el provider OVH configurado
