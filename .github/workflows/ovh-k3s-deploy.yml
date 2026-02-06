@@ -33,15 +33,6 @@ jobs:
           terraform_version: 1.7.0
           terraform_wrapper: false
 
-<<<<<<< HEAD
-      - name: Clean Terraform State (FORCE recreate)
-        run: |
-          rm -rf .terraform .terraform.lock.hcl terraform.tfstate*
-          echo "✅ State cleared - WILL CREATE ALL RESOURCES"
-
-      - name: Terraform Init
-        run: terraform init -upgrade
-=======
       - name: Clean Terraform cache
         run: |
           rm -rf .terraform .terraform.lock.hcl terraform.tfstate*
@@ -61,18 +52,13 @@ jobs:
             echo "Init failed after $max_attempts attempts"
             exit 1
           fi
->>>>>>> 8306258 (feat: añadir infraestructura K3s en OVH con ArgoCD)
 
       - name: Terraform Validate
         run: terraform validate
 
       - name: Terraform Plan
         if: github.event.inputs.action == 'plan' || github.event.inputs.action == 'apply'
-<<<<<<< HEAD
-        run: terraform plan -out=tfplan -detailed-exitcode
-=======
         run: terraform plan
->>>>>>> 8306258 (feat: añadir infraestructura K3s en OVH con ArgoCD)
         env:
           TF_VAR_ovh_endpoint: ${{ secrets.OVH_ENDPOINT }}
           TF_VAR_ovh_application_key: ${{ secrets.OVH_APPLICATION_KEY }}
@@ -84,17 +70,9 @@ jobs:
           TF_VAR_openstack_username: ${{ secrets.OPENSTACK_USERNAME }}
           TF_VAR_openstack_password: ${{ secrets.OPENSTACK_PASSWORD }}
 
-<<<<<<< HEAD
-      - name: Terraform Apply (FORCE CREATE ALL)
-        if: github.event.inputs.action == 'apply'
-        run: |
-          rm -f terraform.tfstate*
-          terraform apply -auto-approve
-=======
       - name: Terraform Apply
         if: github.event.inputs.action == 'apply'
         run: terraform apply -auto-approve
->>>>>>> 8306258 (feat: añadir infraestructura K3s en OVH con ArgoCD)
         env:
           TF_VAR_ovh_endpoint: ${{ secrets.OVH_ENDPOINT }}
           TF_VAR_ovh_application_key: ${{ secrets.OVH_APPLICATION_KEY }}
@@ -110,11 +88,7 @@ jobs:
         if: github.event.inputs.action == 'apply'
         run: |
           mkdir -p ../../ansible/inventory/
-<<<<<<< HEAD
-          terraform output -raw ansible_inventory > ../../ansible/inventory/hosts.yml || echo "{}" > ../../ansible/inventory/hosts.yml
-=======
           terraform output -raw ansible_inventory > ../../ansible/inventory/hosts.yml
->>>>>>> 8306258 (feat: añadir infraestructura K3s en OVH con ArgoCD)
 
       - name: Upload Ansible Inventory
         if: github.event.inputs.action == 'apply'
@@ -125,13 +99,7 @@ jobs:
 
       - name: Terraform Destroy
         if: github.event.inputs.action == 'destroy'
-<<<<<<< HEAD
-        run: |
-          rm -f terraform.tfstate* || true
-          terraform destroy -auto-approve
-=======
         run: terraform destroy -auto-approve
->>>>>>> 8306258 (feat: añadir infraestructura K3s en OVH con ArgoCD)
         env:
           TF_VAR_ovh_endpoint: ${{ secrets.OVH_ENDPOINT }}
           TF_VAR_ovh_application_key: ${{ secrets.OVH_APPLICATION_KEY }}
