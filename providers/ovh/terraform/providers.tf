@@ -8,7 +8,7 @@ provider "ovh" {
 provider "openstack" {
   auth_url    = "https://auth.cloud.ovh.net/v3"
   domain_name = "default"
-  tenant_name = var.openstack_tenant_id
+  tenant_id   = var.openstack_tenant_id
   user_name   = var.openstack_username
   password    = var.openstack_password
   region      = var.region
