@@ -30,7 +30,7 @@ variable "service_name" {
 variable "region" {
   description = "OVH region"
   type        = string
-  default     = "GRA11" # Gravelines, Francia
+  default     = "GRA11"
 }
 
 variable "cluster_name" {
@@ -54,7 +54,7 @@ variable "worker_count" {
 variable "flavor_master" {
   description = "Flavor for master nodes"
   type        = string
-  default     = "b2-7" # 2 vCPU, 7GB RAM
+  default     = "b2-7"
 }
 
 variable "flavor_worker" {
@@ -63,13 +63,31 @@ variable "flavor_worker" {
   default     = "b2-7"
 }
 
+variable "image_name" {
+  description = "OS image name"
+  type        = string
+  default     = "Ubuntu 22.04"
+}
+
 variable "ssh_public_key" {
   description = "SSH public key for instances"
   type        = string
 }
 
-variable "image_name" {
-  description = "OS image name"
+variable "openstack_tenant_id" {
+  description = "OpenStack Tenant ID (Project ID)"
   type        = string
-  default     = "Ubuntu 22.04"
+  sensitive   = true
+}
+
+variable "openstack_username" {
+  description = "OpenStack username"
+  type        = string
+  sensitive   = true
+}
+
+variable "openstack_password" {
+  description = "OpenStack password"
+  type        = string
+  sensitive   = true
 }
