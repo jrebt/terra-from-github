@@ -1,0 +1,24 @@
+name: 'Cleanup Keypair'
+
+on:
+  workflow_dispatch:
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install OpenStack CLI
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-openstackclient
+
+      - name: Delete existing keypair
+        run: |
+          openstack keypair delete k3s-prod-keypair || echo "Keypair not found"
+        env:
+          OS_AUTH_URL: "https://auth.cloud.ovh.net/v3"
+          OS_DOMAIN_NAME: "default"
+          OS_TENANT_ID: ${{ secrets.OPENSTACK_TENANT_ID }}
+          OS_USERNAME: ${{ secrets.OPENSTACK_USERNAME }}
+          OS_PASSWORD: ${{ secrets.OPENSTACK_PASSWORD }}
+          OS_REGION_NAME: "GRA11"
