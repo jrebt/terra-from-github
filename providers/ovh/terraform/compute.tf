@@ -12,12 +12,15 @@ data "openstack_networking_network_v2" "public" {
   name = "Ext-Net"
 }
 
-# Usar el security group por defecto
-data "openstack_networking_secgroup_v2" "default" {
-  name = "default"
+# ========================================
+# SECURITY GROUP PERSONALIZADO PARA K3s
+# ========================================
+resource "openstack_networking_secgroup_v2" "k3s_sg" {
+  name        = "${var.cluster_name}-k3s-sg"
+  description = "Security group optimizado para clúster K3s"
 }
 
-# Añadir reglas al security group default
+# SSH (22) - Acceso administrativo
 resource "openstack_networking_secgroup_rule_v2" "ssh" {
   direction         = "ingress"
   ethertype         = "IPv4"
@@ -25,9 +28,21 @@ resource "openstack_networking_secgroup_rule_v2" "ssh" {
   port_range_min    = 22
   port_range_max    = 22
   remote_ip_prefix  = "0.0.0.0/0"
-  security_group_id = data.openstack_networking_secgroup_v2.default.id
+  security_group_id = openstack_networking_secgroup_v2.k3s_sg.id
 }
 
+# Web (80-443) - Combinado HTTP/HTTPS en 1 regla
+resource "openstack_networking_secgroup_rule_v2" "web" {
+  direction         = "ingress"
+  ethertype         = "IPv4"
+  protocol          = "tcp"
+  port_range_min    = 80
+  port_range_max    = 443
+  remote_ip_prefix  = "0.0.0.0/0"
+  security_group_id = openstack_networking_secgroup_v2.k3s_sg.id
+}
+
+# K3s API (6443)
 resource "openstack_networking_secgroup_rule_v2" "k3s_api" {
   direction         = "ingress"
   ethertype         = "IPv4"
@@ -35,43 +50,48 @@ resource "openstack_networking_secgroup_rule_v2" "k3s_api" {
   port_range_min    = 6443
   port_range_max    = 6443
   remote_ip_prefix  = "0.0.0.0/0"
-  security_group_id = data.openstack_networking_secgroup_v2.default.id
+  security_group_id = openstack_networking_secgroup_v2.k3s_sg.id
 }
 
-resource "openstack_networking_secgroup_rule_v2" "http" {
+# Comunicación interna nodos K3s (todos los puertos TCP)
+resource "openstack_networking_secgroup_rule_v2" "internal_tcp" {
   direction         = "ingress"
   ethertype         = "IPv4"
   protocol          = "tcp"
-  port_range_min    = 80
-  port_range_max    = 80
-  remote_ip_prefix  = "0.0.0.0/0"
-  security_group_id = data.openstack_networking_secgroup_v2.default.id
+  port_range_min    = 1
+  port_range_max    = 65535
+  remote_group_id   = openstack_networking_secgroup_v2.k3s_sg.id
+  security_group_id = openstack_networking_secgroup_v2.k3s_sg.id
 }
 
-resource "openstack_networking_secgroup_rule_v2" "https" {
+# Comunicación interna nodos K3s (UDP para servicios como CoreDNS)
+resource "openstack_networking_secgroup_rule_v2" "internal_udp" {
   direction         = "ingress"
   ethertype         = "IPv4"
-  protocol          = "tcp"
-  port_range_min    = 443
-  port_range_max    = 443
-  remote_ip_prefix  = "0.0.0.0/0"
-  security_group_id = data.openstack_networking_secgroup_v2.default.id
+  protocol          = "udp"
+  port_range_min    = 1
+  port_range_max    = 65535
+  remote_group_id   = openstack_networking_secgroup_id = openstack_networking_secgroup_v2.k3s_sg.id
 }
 
-resource "openstack_networking_secgroup_rule_v2" "internal" {
+# ICMP (ping)
+resource "openstack_networking_secgroup_rule_v2" "icmp" {
   direction         = "ingress"
   ethertype         = "IPv4"
-  remote_group_id   = data.openstack_networking_secgroup_v2.default.id
-  security_group_id = data.openstack_networking_secgroup_v2.default.id
+  protocol          = "icmp"
+  security_group_id = openstack_networking_secgroup_v2.k3s_sg.id
 }
 
+# ========================================
+# INSTANCIAS CON NUEVO SECURITY GROUP
+# ========================================
 resource "openstack_compute_instance_v2" "k3s_master" {
   count           = var.master_count
   name            = "${var.cluster_name}-master-${count.index + 1}"
   image_id        = data.openstack_images_image_v2.ubuntu.id
   flavor_name     = var.flavor_master
   key_pair        = openstack_compute_keypair_v2.k3s_keypair.name
-  security_groups = ["default"]
+  security_groups = [openstack_networking_secgroup_v2.k3s_sg.name]  # ← CAMBIADO
 
   network {
     name = data.openstack_networking_network_v2.public.name
@@ -89,7 +109,7 @@ resource "openstack_compute_instance_v2" "k3s_worker" {
   image_id        = data.openstack_images_image_v2.ubuntu.id
   flavor_name     = var.flavor_worker
   key_pair        = openstack_compute_keypair_v2.k3s_keypair.name
-  security_groups = ["default"]
+  security_groups = [openstack_networking_secgroup_v2.k3s_sg.name]  # ← CAMBIADO
 
   network {
     name = data.openstack_networking_network_v2.public.name
@@ -100,3 +120,4 @@ resource "openstack_compute_instance_v2" "k3s_worker" {
     node_index     = count.index + 1
   })
 }
+
