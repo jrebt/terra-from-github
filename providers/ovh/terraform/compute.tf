@@ -20,7 +20,7 @@ resource "openstack_networking_secgroup_v2" "k3s_sg" {
   description = "Security group optimizado para clúster K3s"
 }
 
-# SSH (22) - Acceso administrativo
+# SSH (22)
 resource "openstack_networking_secgroup_rule_v2" "ssh" {
   direction         = "ingress"
   ethertype         = "IPv4"
@@ -31,7 +31,7 @@ resource "openstack_networking_secgroup_rule_v2" "ssh" {
   security_group_id = openstack_networking_secgroup_v2.k3s_sg.id
 }
 
-# Web (80-443) - Combinado HTTP/HTTPS en 1 regla
+# Web (80-443)
 resource "openstack_networking_secgroup_rule_v2" "web" {
   direction         = "ingress"
   ethertype         = "IPv4"
@@ -53,7 +53,7 @@ resource "openstack_networking_secgroup_rule_v2" "k3s_api" {
   security_group_id = openstack_networking_secgroup_v2.k3s_sg.id
 }
 
-# Comunicación interna nodos K3s (todos los puertos TCP)
+# Comunicación interna TCP
 resource "openstack_networking_secgroup_rule_v2" "internal_tcp" {
   direction         = "ingress"
   ethertype         = "IPv4"
@@ -64,14 +64,15 @@ resource "openstack_networking_secgroup_rule_v2" "internal_tcp" {
   security_group_id = openstack_networking_secgroup_v2.k3s_sg.id
 }
 
-# Comunicación interna nodos K3s (UDP para servicios como CoreDNS)
+# Comunicación interna UDP 
 resource "openstack_networking_secgroup_rule_v2" "internal_udp" {
   direction         = "ingress"
   ethertype         = "IPv4"
   protocol          = "udp"
   port_range_min    = 1
   port_range_max    = 65535
-  remote_group_id   = openstack_networking_secgroup_id = openstack_networking_secgroup_v2.k3s_sg.id
+  remote_group_id   = openstack_networking_secgroup_v2.k3s_sg.id  # ← CORREGIDO
+  security_group_id = openstack_networking_secgroup_v2.k3s_sg.id
 }
 
 # ICMP (ping)
@@ -83,7 +84,7 @@ resource "openstack_networking_secgroup_rule_v2" "icmp" {
 }
 
 # ========================================
-# INSTANCIAS CON NUEVO SECURITY GROUP
+# INSTANCIAS
 # ========================================
 resource "openstack_compute_instance_v2" "k3s_master" {
   count           = var.master_count
@@ -91,7 +92,7 @@ resource "openstack_compute_instance_v2" "k3s_master" {
   image_id        = data.openstack_images_image_v2.ubuntu.id
   flavor_name     = var.flavor_master
   key_pair        = openstack_compute_keypair_v2.k3s_keypair.name
-  security_groups = [openstack_networking_secgroup_v2.k3s_sg.name]  # ← CAMBIADO
+  security_groups = [openstack_networking_secgroup_v2.k3s_sg.name]
 
   network {
     name = data.openstack_networking_network_v2.public.name
@@ -109,7 +110,7 @@ resource "openstack_compute_instance_v2" "k3s_worker" {
   image_id        = data.openstack_images_image_v2.ubuntu.id
   flavor_name     = var.flavor_worker
   key_pair        = openstack_compute_keypair_v2.k3s_keypair.name
-  security_groups = [openstack_networking_secgroup_v2.k3s_sg.name]  # ← CAMBIADO
+  security_groups = [openstack_networking_secgroup_v2.k3s_sg.name]
 
   network {
     name = data.openstack_networking_network_v2.public.name
