@@ -5,8 +5,8 @@
   roles:
     - k3s-master
 
-- name: Install K3s worker nodes
-  hosts: k3s_workers
-  become: yes
-  roles:
-    - k3s-worker
+#- name: Install K3s worker nodes
+#  hosts: k3s_workers
+# become: yes
+#  roles:
+#    - k3s-worker
