@@ -12,14 +12,20 @@ data "openstack_networking_secgroup_v2" "default" {
 }
 
 # ========================================
-# SOLO 1 MASTER MÍNIMO - 0 REGLAS NUEVAS
+# ABSOLUTAMENTE 0 REGLAS - SOLO 1 INSTANCIA
+# SSH y K3s funcionan con "Ingress Any/Any" del default
 # ========================================
+resource "openstack_compute_keypair_v2" "k3s_keypair" {
+  name       = "${var.cluster_name}-keypair"
+  public_key = var.ssh_public_key
+}
+
 resource "openstack_compute_instance_v2" "k3s_master" {
   count           = 1
   name            = "${var.cluster_name}-master-1"
   image_id        = data.openstack_images_image_v2.ubuntu.id
-  flavor_name     = "S1-2"  # ← MÁS PEQUEÑO: 1 core, 2GB
-  key_pair        = var.ssh_keypair_name  # ← Usa keypair EXISTENTE
+  flavor_name     = "S1-2"  # 1 core, 2GB - MÍNIMO
+  key_pair        = openstack_compute_keypair_v2.k3s_keypair.name
   security_groups = ["default"]
 
   network {

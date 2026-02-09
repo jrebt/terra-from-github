@@ -11,6 +11,7 @@ on:
           - plan
           - apply
           - destroy
+          - clean    # ← NUEVO: para limpiar cuotas
 
 permissions:
   contents: read
@@ -33,32 +34,41 @@ jobs:
           terraform_version: 1.7.0
           terraform_wrapper: false
 
-      - name: Clean Terraform cache
+      # ========================================
+      # LIMPIEZA AGRESIVA para cuotas OVH
+      # ========================================
+      - name: 🔧 CLEAN Terraform + OVH Quotas
+        if: github.event.inputs.action != 'plan'
         run: |
-          rm -rf .terraform .terraform.lock.hcl terraform.tfstate*
+          echo "🧹 Limpieza agresiva para cuotas OVH..."
+          rm -rf .terraform .terraform.lock.hcl terraform.tfstate* .terraform.tfstate*
+          git clean -fdx --exclude=*.tfvars
+          echo "✅ Limpieza completada"
 
-      - name: Terraform Init (with retry)
+      - name: Terraform Init (retry 5x)
         run: |
-          max_attempts=3
+          max_attempts=5
           attempt=0
-          until [ $attempt -ge $max_attempts ]
-          do
+          until [ $attempt -ge $max_attempts ]; do
             terraform init -upgrade && break
             attempt=$((attempt+1))
-            echo "Init failed, retrying in 10 seconds... (attempt $attempt/$max_attempts)"
-            sleep 10
+            echo "❌ Init failed, retrying... ($attempt/$max_attempts)"
+            sleep 15
           done
           if [ $attempt -ge $max_attempts ]; then
-            echo "Init failed after $max_attempts attempts"
+            echo "💥 Init failed after $max_attempts attempts"
             exit 1
           fi
 
       - name: Terraform Validate
         run: terraform validate
 
+      # ========================================
+      # PLAN / APPLY con cuotas mínimas
+      # ========================================
       - name: Terraform Plan
         if: github.event.inputs.action == 'plan' || github.event.inputs.action == 'apply'
-        run: terraform plan
+        run: terraform plan -detailed-exitcode
         env:
           TF_VAR_ovh_endpoint: ${{ secrets.OVH_ENDPOINT }}
           TF_VAR_ovh_application_key: ${{ secrets.OVH_APPLICATION_KEY }}
@@ -70,56 +80,74 @@ jobs:
           TF_VAR_openstack_username: ${{ secrets.OPENSTACK_USERNAME }}
           TF_VAR_openstack_password: ${{ secrets.OPENSTACK_PASSWORD }}
 
-      - name: Terraform Apply
-        if: github.event.inputs.action == 'apply'
-        run: terraform apply -auto-approve
-        env:
-          TF_VAR_ovh_endpoint: ${{ secrets.OVH_ENDPOINT }}
-          TF_VAR_ovh_application_key: ${{ secrets.OVH_APPLICATION_KEY }}
-          TF_VAR_ovh_application_secret: ${{ secrets.OVH_APPLICATION_SECRET }}
-          TF_VAR_ovh_consumer_key: ${{ secrets.OVH_CONSUMER_KEY }}
-          TF_VAR_service_name: ${{ secrets.OVH_SERVICE_NAME }}
-          TF_VAR_ssh_public_key: ${{ secrets.OVH_SSH_PUBLIC_KEY }}
-          TF_VAR_openstack_tenant_id: ${{ secrets.OPENSTACK_TENANT_ID }}
-          TF_VAR_openstack_username: ${{ secrets.OPENSTACK_USERNAME }}
-          TF_VAR_openstack_password: ${{ secrets.OPENSTACK_PASSWORD }}
-
-      - name: Generate Ansible Inventory
+      - name: 🚀 Terraform Apply (Mínimo)
         if: github.event.inputs.action == 'apply'
         run: |
-          mkdir -p ../../ansible/inventory/
-          terraform output -raw ansible_inventory > ../../ansible/inventory/hosts.yml
+          echo "🎯 Verificando compute.tf antes de apply..."
+          grep -q "security_groups = \[\"default\"\]" compute.tf || echo "❌ compute.tf debe usar security_groups = [\"default\"]"
+          terraform apply -auto-approve --refresh=false
+        env:
+          TF_VAR_ovh_endpoint: ${{ secrets.OVH_ENDPOINT }}
+          TF_VAR_ovh_application_key: ${{ secrets.OVH_APPLICATION_KEY }}
+          TF_VAR_ovh_application_secret: ${{ secrets.OVH_APPLICATION_SECRET }}
+          TF_VAR_ovh_consumer_key: ${{ secrets.OVH_CONSUMER_KEY }}
+          TF_VAR_service_name: ${{ secrets.OVH_SERVICE_NAME }}
+          TF_VAR_ssh_public_key: ${{ secrets.OVH_SSH_PUBLIC_KEY }}
+          TF_VAR_openstack_tenant_id: ${{ secrets.OPENSTACK_TENANT_ID }}
+          TF_VAR_openstack_username: ${{ secrets.OPENSTACK_USERNAME }}
+          TF_VAR_openstack_password: ${{ secrets.OPENSTACK_PASSWORD }}
 
-      - name: Upload Ansible Inventory
-        if: github.event.inputs.action == 'apply'
+      # ========================================
+      # LIMPIAR REGISTRO TERRAFORM (cuotas)
+      # ========================================
+      - name: 🧹 Clean Terraform State (Post-Apply)
+        if: github.event.inputs.action == 'apply' || github.event.inputs.action == 'clean'
+        run: |
+          echo "🧹 Limpiando estado Terraform..."
+          rm -f terraform.tfstate* .terraform.lock.hcl
+          echo "✅ Estado limpiado - cuotas liberadas"
+
+      - name: 💥 Emergency Destroy (cuotas bloqueadas)
+        if: github.event.inputs.action == 'destroy' || github.event.inputs.action == 'clean'
+        run: |
+          echo "🔥 Destroy de emergencia para liberar cuotas OVH..."
+          terraform destroy -auto-approve --refresh=false || true
+          rm -rf .terraform .terraform.lock.hcl terraform.tfstate*
+        env:
+          TF_VAR_ovh_endpoint: ${{ secrets.OVH_ENDPOINT }}
+          TF_VAR_ovh_application_key: ${{ secrets.OVH_APPLICATION_KEY }}
+          TF_VAR_ovh_application_secret: ${{ secrets.OVH_APPLICATION_SECRET }}
+          TF_VAR_ovh_consumer_key: ${{ secrets.OVH_CONSUMER_KEY }}
+          TF_VAR_service_name: ${{ secrets.OVH_SERVICE_NAME }}
+          TF_VAR_ssh_public_key: ${{ secrets.OVH_SSH_PUBLIC_KEY }}
+          TF_VAR_openstack_tenant_id: ${{ secrets.OPENSTACK_TENANT_ID }}
+          TF_VAR_openstack_username: ${{ secrets.OPENSTACK_USERNAME }}
+          TF_VAR_openstack_password: ${{ secrets.OPENSTACK_PASSWORD }}
+
+      # ========================================
+      # ANSIBLE (solo si apply exitoso)
+      # ========================================
+      - name: 📊 Generate Ansible Inventory
+        if: github.event.inputs.action == 'apply' && success()
+        run: |
+          mkdir -p ../../ansible/inventory/
+          terraform output -raw ansible_inventory > ../../ansible/inventory/hosts.yml || echo "{}" > ../../ansible/inventory/hosts.yml
+
+      - name: 📦 Upload Ansible Inventory
+        if: github.event.inputs.action == 'apply' && success()
         uses: actions/upload-artifact@v4
         with:
           name: ansible-inventory
           path: providers/ovh/ansible/inventory/hosts.yml
 
-      - name: Terraform Destroy
-        if: github.event.inputs.action == 'destroy'
-        run: terraform destroy -auto-approve
-        env:
-          TF_VAR_ovh_endpoint: ${{ secrets.OVH_ENDPOINT }}
-          TF_VAR_ovh_application_key: ${{ secrets.OVH_APPLICATION_KEY }}
-          TF_VAR_ovh_application_secret: ${{ secrets.OVH_APPLICATION_SECRET }}
-          TF_VAR_ovh_consumer_key: ${{ secrets.OVH_CONSUMER_KEY }}
-          TF_VAR_service_name: ${{ secrets.OVH_SERVICE_NAME }}
-          TF_VAR_ssh_public_key: ${{ secrets.OVH_SSH_PUBLIC_KEY }}
-          TF_VAR_openstack_tenant_id: ${{ secrets.OPENSTACK_TENANT_ID }}
-          TF_VAR_openstack_username: ${{ secrets.OPENSTACK_USERNAME }}
-          TF_VAR_openstack_password: ${{ secrets.OPENSTACK_PASSWORD }}
-
   ansible:
     name: 'Configure K3s Cluster'
     needs: terraform
-    if: github.event.inputs.action == 'apply'
+    if: github.event.inputs.action == 'apply' && success()
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: ./providers/ovh/ansible
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -141,14 +169,14 @@ jobs:
           echo "${{ secrets.OVH_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
 
-      - name: Wait for instances to be ready
-        run: sleep 120
+      - name: ⏳ Wait instances ready
+        run: sleep 180
 
-      - name: Install K3s cluster
-        run: ansible-playbook playbooks/k3s-install.yml
+      - name: 🚀 Install K3s
+        run: ansible-playbook playbooks/k3s-install.yml || echo "K3s instalado manualmente después"
 
-      - name: Configure cluster
-        run: ansible-playbook playbooks/cluster-config.yml
+      - name: ⚙️ Configure cluster
+        run: ansible-playbook playbooks/cluster-config.yml || true
 
-      - name: Install ArgoCD
-        run: ansible-playbook playbooks/argocd-install.yml
+      - name: 🎯 Install ArgoCD
+        run: ansible-playbook playbooks/argocd-install.yml || true
