@@ -24,7 +24,7 @@ resource "openstack_compute_instance_v2" "k3s_master" {
   count           = 1
   name            = "${var.cluster_name}-master-1"
   image_id        = data.openstack_images_image_v2.ubuntu.id
-  flavor_name     = "S1-2"  # 1 core, 2GB - MÍNIMO
+  flavor_name     = "b2-7"  # 1 core, 2GB - MÍNIMO
   key_pair        = openstack_compute_keypair_v2.k3s_keypair.name
   security_groups = ["default"]
 
