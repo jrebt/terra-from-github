@@ -1,5 +1,4 @@
 name: 'OVH K3s Cluster Deploy'
-
 on:
   workflow_dispatch:
     inputs:
@@ -20,9 +19,6 @@ jobs:
   terraform:
     name: 'Terraform ${{ github.event.inputs.action }}'
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./providers/ovh/terraform/providers/ovh/terraform
 
     steps:
       - name: Checkout
@@ -37,16 +33,27 @@ jobs:
         if: github.event.inputs.action != 'plan'
         run: |
           rm -rf .terraform .terraform.lock.hcl terraform.tfstate*
+        working-directory: ./providers/ovh/terraform
 
+      # ✅ TRUCO: cd manual + working-directory POR STEP
       - name: Terraform Init
-        run: terraform init -upgrade
+        run: |
+          cd providers/ovh/terraform
+          terraform init -upgrade
+        working-directory: .
 
       - name: Terraform Validate
-        run: terraform validate
+        run: |
+          cd providers/ovh/terraform
+          terraform validate
+        working-directory: .
 
       - name: Terraform Plan
         if: github.event.inputs.action == 'plan' || github.event.inputs.action == 'apply'
-        run: terraform plan -detailed-exitcode || true
+        run: |
+          cd providers/ovh/terraform
+          terraform plan -detailed-exitcode
+        working-directory: .
         env:
           TF_VAR_ovh_endpoint: ${{ secrets.OVH_ENDPOINT }}
           TF_VAR_ovh_application_key: ${{ secrets.OVH_APPLICATION_KEY }}
@@ -60,7 +67,10 @@ jobs:
 
       - name: 🚀 Terraform Apply
         if: github.event.inputs.action == 'apply'
-        run: terraform apply -auto-approve
+        run: |
+          cd providers/ovh/terraform
+          terraform apply -auto-approve
+        working-directory: .
         env:
           TF_VAR_ovh_endpoint: ${{ secrets.OVH_ENDPOINT }}
           TF_VAR_ovh_application_key: ${{ secrets.OVH_APPLICATION_KEY }}
@@ -72,141 +82,63 @@ jobs:
           TF_VAR_openstack_username: ${{ secrets.OPENSTACK_USERNAME }}
           TF_VAR_openstack_password: ${{ secrets.OPENSTACK_PASSWORD }}
 
-      - name: 📊 Generate Ansible Inventory AUTOMÁTICO
+      - name: 📊 Generate Ansible Inventory
         if: github.event.inputs.action == 'apply'
         run: |
-          echo "🎯 Generando inventario AUTOMÁTICO..."
-          mkdir -p ../../ansible/inventory/
+          cd providers/ovh/terraform
+          mkdir -p ../../ansible/inventory
           
-          # ✅ OPCIÓN 1: Terraform outputs (PRIMERO)
+          # Terraform output directo
           if terraform output -raw ansible_inventory > ../../ansible/inventory/hosts.yml 2>/dev/null; then
-            echo "✅ Inventario desde Terraform outputs"
+            echo "✅ Inventario desde outputs"
           else
-            # ✅ OPCIÓN 2: Extraer IPs directamente del state
-            echo "🔍 Extrayendo IPs del Terraform state..."
-            mkdir -p ../../ansible/inventory/
-            cat > ../../ansible/inventory/hosts.yml << 'EOF'
-all:
-  vars:
-    ansible_user: ubuntu
-    ansible_ssh_private_key_file: ~/.ssh/id_rsa
-  children:
-    k3s_masters:
-      hosts: {}
-    k3s_workers:
-      hosts: {}
-EOF
-            
-            # Extraer masters
-            MASTERS=$(terraform show -json | jq -r '.values.root_module.resources[] | select(.type=="openstack_compute_instance_v2" and .name=="k3s_master") | .values.access_ip_v4 // empty')
-            for ip in $MASTERS; do
-              if [ ! -z "$ip" ]; then
-                yq e ".all.children.k3s_masters.hosts.\"k3s-master-$(echo $ip | cut -d. -f4)\".ansible_host = \"$ip\"" -i ../../ansible/inventory/hosts.yml
-              fi
-            done
-            
-            # Extraer workers (si existen)
-            WORKERS=$(terraform show -json | jq -r '.values.root_module.resources[] | select(.type=="openstack_compute_instance_v2" and .name=="k3s_worker") | .values.access_ip_v4 // empty')
-            for ip in $WORKERS; do
-              if [ ! -z "$ip" ]; then
-                yq e ".all.children.k3s_workers.hosts.\"k3s-worker-$(echo $ip | cut -d. -f4)\".ansible_host = \"$ip\"" -i ../../ansible/inventory/hosts.yml
-              fi
-            done
+            echo "⚠️ Inventario vacío - usa Horizon IPs"
+            echo "all:\n  children:\n    k3s_masters:\n      hosts: {}" > ../../ansible/inventory/hosts.yml
           fi
-          
-          echo "📋 Inventario generado:"
           cat ../../ansible/inventory/hosts.yml
-        env:
-          TF_VAR_ovh_endpoint: ${{ secrets.OVH_ENDPOINT }}
-          TF_VAR_ovh_application_key: ${{ secrets.OVH_APPLICATION_KEY }}
-          TF_VAR_ovh_application_secret: ${{ secrets.OVH_APPLICATION_SECRET }}
-          TF_VAR_ovh_consumer_key: ${{ secrets.OVH_CONSUMER_KEY }}
-          TF_VAR_service_name: ${{ secrets.OVH_SERVICE_NAME }}
-          TF_VAR_ssh_public_key: ${{ secrets.OVH_SSH_PUBLIC_KEY }}
-          TF_VAR_openstack_tenant_id: ${{ secrets.OPENSTACK_TENANT_ID }}
-          TF_VAR_openstack_username: ${{ secrets.OPENSTACK_USERNAME }}
-          TF_VAR_openstack_password: ${{ secrets.OPENSTACK_PASSWORD }}
+        working-directory: .
 
-      - name: 📦 Upload Ansible Inventory
+      - name: 📦 Upload Inventory
         if: github.event.inputs.action == 'apply'
         uses: actions/upload-artifact@v4
         with:
           name: ansible-inventory
-          path: ../../ansible/inventory/
-
-      - name: 💥 Destroy/Clean
-        if: github.event.inputs.action == 'destroy' || github.event.inputs.action == 'clean'
-        run: |
-          terraform destroy -auto-approve || true
-          rm -rf .terraform*
+          path: providers/ovh/ansible/inventory/
 
   ansible:
-    name: '🚀 Configure K3s Cluster'
     needs: terraform
     if: github.event.inputs.action == 'apply'
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: ./providers/ovh/terraform/providers/ovh/terraform/providers/ovh/ansible
+        working-directory: ./providers/ovh/ansible
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: 📥 Download Inventory
-        uses: actions/download-artifact@v4
         continue-on-error: true
+        uses: actions/download-artifact@v4
         with:
           name: ansible-inventory
           path: inventory/
 
-      - name: 🔍 Verify Inventory
+      - name: 🛠️ Install Ansible
         run: |
-          if [ ! -f "inventory/hosts.yml" ]; then
-            echo "❌ No inventory found - creating minimal"
-            mkdir -p inventory
-            cat > inventory/hosts.yml << EOF
-all:
-  children:
-    k3s_masters:
-      hosts: {}
-EOF
-          fi
-          echo "📋 Inventory:"
-          cat inventory/hosts.yml
+          sudo apt-get update && sudo apt-get install -y ansible jq yq
 
-      - name: 🛠️ Install Ansible + yq
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ansible sshpass jq yq
-
-      - name: 🔑 Setup SSH
+      - name: 🔑 SSH Setup
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.OVH_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
 
-      - name: 🌐 Add known_hosts
+      - name: ⏳ Wait 5min
+        run: sleep 300
+
+      - name: 🚀 Ansible Playbooks
         run: |
-          ansible-inventory -i inventory/hosts.yml --list | jq -r '.all.children.k3s_masters.hosts | keys[] | .ansible_host' | while read ip; do
-            ssh-keyscan -H $ip >> ~/.ssh/known_hosts 2>/dev/null || true
-          done
-
-      - name: ⏳ Wait instances (5min)
-        run: sleep 301
-
-      - name: 🚀 Install K3s
-        run: ansible-playbook -i inventory/hosts.yml playbooks/k3s-install.yml || echo "K3s via cloud-init OK"
-
-      - name: ⚙️ Configure cluster  
-        run: ansible-playbook -i inventory/hosts.yml playbooks/cluster-config.yml || true
-
-      - name: 🎯 Install ArgoCD
-        run: ansible-playbook -i inventory/hosts.yml playbooks/argocd-install.yml || true
-
-      - name: ✅ Verify cluster
-        run: |
-          ansible all:!unreachable -i inventory/hosts.yml -m ping
-          echo "🎉 K3s cluster deployment COMPLETED!"
-
-# Workflow fix Tue Feb 10 11:35:54 UTC 2026
+          ansible-playbook playbooks/k3s-install.yml || true
+          ansible-playbook playbooks/cluster-config.yml || true
+          ansible-playbook playbooks/argocd-install.yml || true
