@@ -1,0 +1,35 @@
+---
+- name: Create ArgoCD namespace
+  command: kubectl create namespace {{ argocd_namespace }}
+  failed_when: false
+  changed_when: false
+
+- name: Install ArgoCD
+  command: kubectl apply -n {{ argocd_namespace }} -f {{ argocd_install_manifest }}
+  register: argocd_install
+  changed_when: "'created' in argocd_install.stdout or 'configured' in argocd_install.stdout"
+
+- name: Wait for ArgoCD to be ready
+  command: kubectl wait --for=condition=available --timeout=300s deployment/argocd-server -n {{ argocd_namespace }}
+
+- name: Patch ArgoCD server service to NodePort
+  command: |
+    kubectl patch svc argocd-server -n {{ argocd_namespace }} -p '{"spec": {"type": "NodePort"}}'
+
+- name: Get ArgoCD admin password
+  shell: kubectl -n {{ argocd_namespace }} get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d
+  register: argocd_password
+  changed_when: false
+
+- name: Get ArgoCD server NodePort
+  shell: kubectl get svc argocd-server -n {{ argocd_namespace }} -o jsonpath='{.spec.ports[?(@.name=="https")].nodePort}'
+  register: argocd_nodeport
+  changed_when: false
+
+- name: Display ArgoCD access information
+  debug:
+    msg:
+      - "ArgoCD is installed!"
+      - "Access URL: https://{{ ansible_host }}:{{ argocd_nodeport.stdout }}"
+      - "Username: admin"
+      - "Password: {{ argocd_password.stdout }}"

@@ -1,0 +1,18 @@
+---
+- name: Configure K3s cluster
+  hosts: k3s_masters[0]
+  become: yes
+  tasks:
+    - name: Label worker nodes
+      command: kubectl label nodes {{ item }} node-role.kubernetes.io/worker=worker --overwrite
+      loop: "{{ groups['k3s_workers'] }}"
+      changed_when: false
+
+    - name: Get cluster nodes
+      command: kubectl get nodes
+      register: nodes_output
+      changed_when: false
+
+    - name: Display nodes
+      debug:
+        var: nodes_output.stdout_lines

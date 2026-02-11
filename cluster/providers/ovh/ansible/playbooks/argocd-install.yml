@@ -1,0 +1,6 @@
+---
+- name: Install ArgoCD
+  hosts: k3s_masters[0]
+  become: yes
+  roles:
+    - argocd
