@@ -64,7 +64,18 @@ jobs:
 
       - name: Terraform Plan
         if: github.event.inputs.action == 'plan' || github.event.inputs.action == 'apply'
-        run: terraform plan -detailed-exitcode
+        run: |
+          set +e
+          terraform plan -detailed-exitcode
+          EXIT_CODE=$?
+          set -e
+          if [ $EXIT_CODE -eq 2 ]; then
+            echo "Changes detected, proceeding"
+            exit 0
+          elif [ $EXIT_CODE -ne 0 ]; then
+            echo "Plan failed with exit code $EXIT_CODE"
+            exit $EXIT_CODE
+          fi
         working-directory: ./cluster/providers/ovh/terraform
         env:
           TF_VAR_ovh_endpoint: ${{ secrets.OVH_ENDPOINT }}
