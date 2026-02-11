@@ -28,6 +28,7 @@ jobs:
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.7.0
+          terraform_wrapper: false
 
       - name: CLEAN Terraform State
         if: github.event.inputs.action != 'plan'
@@ -109,15 +110,19 @@ jobs:
       - name: Generate Ansible Inventory
         if: github.event.inputs.action == 'apply'
         run: |
-          mkdir -p ../../ansible/inventory
+          INVENTORY_DIR="${GITHUB_WORKSPACE}/cluster/providers/ovh/ansible/inventory"
+          mkdir -p "$INVENTORY_DIR"
 
-          if terraform output -raw ansible_inventory > ../../ansible/inventory/hosts.yml 2>/dev/null; then
-            echo "Inventario generado desde outputs"
-          else
-            echo "Inventario vacio - usa Horizon IPs"
-            echo "all:\n  children:\n    k3s_masters:\n      hosts: {}\n    k3s_workers:\n      hosts: {}" > ../../ansible/inventory/hosts.yml
-          fi
-          cat ../../ansible/inventory/hosts.yml
+          echo "=== Terraform outputs ==="
+          terraform output || true
+
+          echo "=== Generating inventory ==="
+          terraform output -raw ansible_inventory > "$INVENTORY_DIR/hosts.yml"
+
+          echo "=== Inventory content ==="
+          cat "$INVENTORY_DIR/hosts.yml"
+          echo "=== Inventory file size ==="
+          wc -c "$INVENTORY_DIR/hosts.yml"
         working-directory: ./cluster/providers/ovh/terraform
         env:
           TF_VAR_ovh_endpoint: ${{ secrets.OVH_ENDPOINT }}
@@ -135,7 +140,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ansible-inventory
-          path: cluster/providers/ovh/ansible/inventory/
+          path: ${{ github.workspace }}/cluster/providers/ovh/ansible/inventory/
 
   ansible:
     needs: terraform
@@ -150,11 +155,17 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Download Inventory
-        continue-on-error: true
         uses: actions/download-artifact@v4
         with:
           name: ansible-inventory
-          path: cluster/providers/ovh/ansible/inventory/
+          path: ${{ github.workspace }}/cluster/providers/ovh/ansible/inventory/
+
+      - name: Verify Inventory
+        run: |
+          echo "=== Inventory file ==="
+          cat inventory/hosts.yml
+          echo "=== Validating YAML ==="
+          python3 -c "import yaml; yaml.safe_load(open('inventory/hosts.yml'))" && echo "YAML OK"
 
       - name: Install Ansible
         run: |
