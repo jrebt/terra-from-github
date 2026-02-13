@@ -51,7 +51,7 @@ jobs:
       - name: NATS JetStream status
         run: |
           ssh -o StrictHostKeyChecking=no ubuntu@${{ steps.host.outputs.ip }} \
-            "kubectl exec -n nats deployment/nats-box -- nats server info"
+            "kubectl exec -n nats deployment/nats-box -- nats account info"
 
       - name: NATS JetStream streams
         run: |
