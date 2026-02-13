@@ -16,6 +16,16 @@
   command: |
     kubectl patch svc argocd-server -n {{ argocd_namespace }} -p '{"spec": {"type": "LoadBalancer"}}'
 
+- name: Set ArgoCD server to insecure mode (for Traefik ingress)
+  command: |
+    kubectl patch configmap argocd-cmd-params-cm -n {{ argocd_namespace }} --type merge -p '{"data": {"server.insecure": "true"}}'
+
+- name: Restart ArgoCD server to apply insecure mode
+  command: kubectl rollout restart deployment/argocd-server -n {{ argocd_namespace }}
+
+- name: Wait for ArgoCD server restart
+  command: kubectl wait --for=condition=available --timeout=120s deployment/argocd-server -n {{ argocd_namespace }}
+
 - name: Get ArgoCD admin password
   shell: kubectl -n {{ argocd_namespace }} get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d
   register: argocd_password

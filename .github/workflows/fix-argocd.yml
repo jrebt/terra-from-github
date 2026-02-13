@@ -1,0 +1,43 @@
+name: 'Fix ArgoCD Insecure Mode'
+
+on:
+  workflow_dispatch:
+    inputs:
+      host_ip:
+        description: 'K3D host IP'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  fix:
+    name: 'Patch ArgoCD'
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH Setup
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.OVH_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+
+      - name: Patch ArgoCD to insecure mode
+        run: |
+          ssh -o StrictHostKeyChecking=no ubuntu@${{ github.event.inputs.host_ip }} \
+            "kubectl patch configmap argocd-cmd-params-cm -n argocd --type merge -p '{\"data\": {\"server.insecure\": \"true\"}}'"
+
+      - name: Restart ArgoCD server
+        run: |
+          ssh -o StrictHostKeyChecking=no ubuntu@${{ github.event.inputs.host_ip }} \
+            "kubectl rollout restart deployment/argocd-server -n argocd"
+
+      - name: Wait for restart
+        run: |
+          ssh -o StrictHostKeyChecking=no ubuntu@${{ github.event.inputs.host_ip }} \
+            "kubectl rollout status deployment/argocd-server -n argocd --timeout=120s"
+
+      - name: Verify ingress
+        run: |
+          ssh -o StrictHostKeyChecking=no ubuntu@${{ github.event.inputs.host_ip }} \
+            "kubectl get ingress -n argocd"
