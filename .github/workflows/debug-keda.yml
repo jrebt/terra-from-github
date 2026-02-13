@@ -1,0 +1,43 @@
+name: 'Debug KEDA'
+
+on:
+  workflow_dispatch:
+    inputs:
+      host_ip:
+        description: 'K3D host IP'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  debug:
+    name: 'Debug KEDA operator'
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH Setup
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.OVH_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+
+      - name: KEDA operator logs
+        run: |
+          ssh -o StrictHostKeyChecking=no ubuntu@${{ github.event.inputs.host_ip }} \
+            "kubectl logs -n keda deployment/keda-operator --tail=80"
+
+      - name: KEDA operator describe
+        run: |
+          ssh -o StrictHostKeyChecking=no ubuntu@${{ github.event.inputs.host_ip }} \
+            "kubectl describe pod -n keda -l app=keda-operator | tail -40"
+
+      - name: ScaledObject describe
+        run: |
+          ssh -o StrictHostKeyChecking=no ubuntu@${{ github.event.inputs.host_ip }} \
+            "kubectl describe scaledobject event-logger -n event-logger"
+
+      - name: Event-logger pods
+        run: |
+          ssh -o StrictHostKeyChecking=no ubuntu@${{ github.event.inputs.host_ip }} \
+            "kubectl get pods -n event-logger -o wide"
