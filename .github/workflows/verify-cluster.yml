@@ -1,0 +1,68 @@
+name: 'Verify K3D Cluster'
+
+on:
+  workflow_dispatch:
+    inputs:
+      host_ip:
+        description: 'K3D host IP (leave empty to use K3S_MASTER_IP secret)'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: 'Verify Cluster'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Determine host IP
+        id: host
+        run: |
+          if [ -n "${{ github.event.inputs.host_ip }}" ]; then
+            echo "ip=${{ github.event.inputs.host_ip }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "ip=${{ secrets.K3S_MASTER_IP }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: SSH Setup
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.OVH_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+
+      - name: K3D cluster status
+        run: |
+          ssh -o StrictHostKeyChecking=no ubuntu@${{ steps.host.outputs.ip }} "k3d cluster list"
+
+      - name: Kubernetes nodes
+        run: |
+          ssh -o StrictHostKeyChecking=no ubuntu@${{ steps.host.outputs.ip }} "kubectl get nodes -o wide"
+
+      - name: All pods
+        run: |
+          ssh -o StrictHostKeyChecking=no ubuntu@${{ steps.host.outputs.ip }} "kubectl get pods -A"
+
+      - name: ArgoCD applications
+        run: |
+          ssh -o StrictHostKeyChecking=no ubuntu@${{ steps.host.outputs.ip }} "kubectl get applications -n argocd -o wide"
+
+      - name: NATS JetStream status
+        run: |
+          ssh -o StrictHostKeyChecking=no ubuntu@${{ steps.host.outputs.ip }} \
+            "kubectl exec -n nats deployment/nats-box -- nats server info"
+
+      - name: NATS JetStream streams
+        run: |
+          ssh -o StrictHostKeyChecking=no ubuntu@${{ steps.host.outputs.ip }} \
+            "kubectl exec -n nats deployment/nats-box -- nats stream ls 2>&1 || echo 'No streams yet'"
+
+      - name: KEDA status
+        run: |
+          ssh -o StrictHostKeyChecking=no ubuntu@${{ steps.host.outputs.ip }} \
+            "kubectl get pods -n keda && kubectl get scaledobject -A 2>/dev/null || echo 'No ScaledObjects yet'"
+
+      - name: Ingress routes
+        run: |
+          ssh -o StrictHostKeyChecking=no ubuntu@${{ steps.host.outputs.ip }} "kubectl get ingress -A"
