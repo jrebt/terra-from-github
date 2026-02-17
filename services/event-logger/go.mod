@@ -1,4 +1,4 @@
-module github.com/jreb-123/terra-from-github/services/event-logger
+module github.com/jrebt/terra-from-github/services/event-logger
 
 go 1.22
 

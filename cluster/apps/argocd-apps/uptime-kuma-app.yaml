@@ -6,7 +6,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/jreb-123/terra-from-github.git
+    repoURL: https://github.com/jrebt/terra-from-github.git
     targetRevision: main
     path: cluster/apps/uptime-kuma
   destination:

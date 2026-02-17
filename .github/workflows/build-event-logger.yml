@@ -33,5 +33,5 @@ jobs:
           context: services/event-logger
           push: true
           tags: |
-            ghcr.io/jreb-123/event-logger:${{ github.sha }}
-            ghcr.io/jreb-123/event-logger:latest
+            ghcr.io/jrebt/event-logger:${{ github.sha }}
+            ghcr.io/jrebt/event-logger:latest

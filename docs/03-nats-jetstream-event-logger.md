@@ -201,7 +201,7 @@ Se creó el chart local `cluster/apps/event-logger/` siguiendo el mismo patrón 
 
 | Aspecto | uptime-kuma | event-logger |
 |---------|-------------|--------------|
-| Imagen | Docker Hub (`louislam/uptime-kuma`) | GHCR (`ghcr.io/jreb-123/event-logger`) |
+| Imagen | Docker Hub (`louislam/uptime-kuma`) | GHCR (`ghcr.io/jrebt/event-logger`) |
 | pullPolicy | `IfNotPresent` | `Always` (tag `latest`) |
 | Variables de entorno | ninguna | `NATS_URL`, `PORT` |
 | Health probes | path: `/` | path: `/health` |
