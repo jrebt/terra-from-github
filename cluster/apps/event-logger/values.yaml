@@ -16,6 +16,11 @@ ingress:
 nats:
   url: nats://nats.nats.svc.cluster.local:4222
 
+keda:
+  enabled: true
+  desiredReplicas: "1"
+  timezone: "Europe/Madrid"
+
 resources:
   requests:
     cpu: 25m

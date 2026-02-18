@@ -50,6 +50,6 @@ spec:
               - type: cron
                 metadata:
                   timezone: "{{request.object.metadata.annotations.\"keda/timezone\"}}"
-                  start: "0 8 * * 1-5"
-                  end: "0 20 * * 1-5"
+                  start: "0 9 * * 1-5"
+                  end: "0 19 * * 1-5"
                   desiredReplicas: "{{request.object.metadata.annotations.\"keda/desired-replicas\"}}"

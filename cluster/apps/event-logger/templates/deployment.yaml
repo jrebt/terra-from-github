@@ -4,6 +4,14 @@ metadata:
   name: {{ .Release.Name }}
   labels:
     app: {{ .Release.Name }}
+    {{- if .Values.keda.enabled }}
+    keda/cron-schedule: "business-hours"
+    {{- end }}
+  {{- if .Values.keda.enabled }}
+  annotations:
+    keda/desired-replicas: "{{ .Values.keda.desiredReplicas }}"
+    keda/timezone: "{{ .Values.keda.timezone }}"
+  {{- end }}
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
