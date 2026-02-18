@@ -1,0 +1,130 @@
+name: 'Schedule VM Start/Stop'
+
+on:
+  schedule:
+    # Encender L-V a las 8:50 UTC (9:50 Madrid CET / 10:50 CEST)
+    - cron: '50 7 * * 1-5'
+    # Apagar L-V a las 20:10 UTC (21:10 Madrid CET / 22:10 CEST)
+    - cron: '10 19 * * 1-5'
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Action to perform'
+        required: true
+        type: choice
+        options:
+          - start
+          - stop
+          - status
+
+permissions:
+  contents: read
+
+jobs:
+  manage-vm:
+    name: 'VM ${{ github.event.inputs.action || (github.event.schedule == ''50 7 * * 1-5'' && ''start'' || ''stop'') }}'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Determine action
+        id: action
+        run: |
+          if [ -n "${{ github.event.inputs.action }}" ]; then
+            echo "action=${{ github.event.inputs.action }}" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event.schedule }}" = "50 7 * * 1-5" ]; then
+            echo "action=start" >> "$GITHUB_OUTPUT"
+          else
+            echo "action=stop" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install OpenStack CLI
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-openstackclient
+
+      - name: Get VM info
+        id: vm
+        run: |
+          VM_ID=$(openstack server list --name k3s-istio-host -f value -c ID | head -1)
+          VM_STATUS=$(openstack server show "$VM_ID" -f value -c status)
+          echo "id=$VM_ID" >> "$GITHUB_OUTPUT"
+          echo "status=$VM_STATUS" >> "$GITHUB_OUTPUT"
+          echo "VM: $VM_ID (status: $VM_STATUS)"
+        env:
+          OS_AUTH_URL: "https://auth.cloud.ovh.net/v3"
+          OS_DOMAIN_NAME: "default"
+          OS_TENANT_ID: ${{ secrets.OPENSTACK_TENANT_ID }}
+          OS_USERNAME: ${{ secrets.OPENSTACK_USERNAME }}
+          OS_PASSWORD: ${{ secrets.OPENSTACK_PASSWORD }}
+          OS_REGION_NAME: "GRA11"
+
+      - name: Start VM (unshelve)
+        if: steps.action.outputs.action == 'start' && steps.vm.outputs.status == 'SHELVED_OFFLOADED'
+        run: |
+          echo "Starting VM ${{ steps.vm.outputs.id }}..."
+          openstack server unshelve ${{ steps.vm.outputs.id }}
+          echo "Waiting for VM to become ACTIVE..."
+          for i in $(seq 1 30); do
+            STATUS=$(openstack server show ${{ steps.vm.outputs.id }} -f value -c status)
+            echo "  Attempt $i/30: $STATUS"
+            if [ "$STATUS" = "ACTIVE" ]; then
+              echo "VM is ACTIVE!"
+              break
+            fi
+            sleep 10
+          done
+        env:
+          OS_AUTH_URL: "https://auth.cloud.ovh.net/v3"
+          OS_DOMAIN_NAME: "default"
+          OS_TENANT_ID: ${{ secrets.OPENSTACK_TENANT_ID }}
+          OS_USERNAME: ${{ secrets.OPENSTACK_USERNAME }}
+          OS_PASSWORD: ${{ secrets.OPENSTACK_PASSWORD }}
+          OS_REGION_NAME: "GRA11"
+
+      - name: Stop VM (shelve)
+        if: steps.action.outputs.action == 'stop' && steps.vm.outputs.status == 'ACTIVE'
+        run: |
+          echo "Shelving VM ${{ steps.vm.outputs.id }}..."
+          openstack server shelve ${{ steps.vm.outputs.id }}
+          echo "Waiting for VM to be SHELVED..."
+          for i in $(seq 1 30); do
+            STATUS=$(openstack server show ${{ steps.vm.outputs.id }} -f value -c status)
+            echo "  Attempt $i/30: $STATUS"
+            if [ "$STATUS" = "SHELVED_OFFLOADED" ]; then
+              echo "VM is SHELVED!"
+              break
+            fi
+            sleep 10
+          done
+        env:
+          OS_AUTH_URL: "https://auth.cloud.ovh.net/v3"
+          OS_DOMAIN_NAME: "default"
+          OS_TENANT_ID: ${{ secrets.OPENSTACK_TENANT_ID }}
+          OS_USERNAME: ${{ secrets.OPENSTACK_USERNAME }}
+          OS_PASSWORD: ${{ secrets.OPENSTACK_PASSWORD }}
+          OS_REGION_NAME: "GRA11"
+
+      - name: Show VM status
+        if: steps.action.outputs.action == 'status'
+        run: |
+          openstack server show ${{ steps.vm.outputs.id }} -f table -c name -c status -c addresses -c flavor
+        env:
+          OS_AUTH_URL: "https://auth.cloud.ovh.net/v3"
+          OS_DOMAIN_NAME: "default"
+          OS_TENANT_ID: ${{ secrets.OPENSTACK_TENANT_ID }}
+          OS_USERNAME: ${{ secrets.OPENSTACK_USERNAME }}
+          OS_PASSWORD: ${{ secrets.OPENSTACK_PASSWORD }}
+          OS_REGION_NAME: "GRA11"
+
+      - name: Show final status
+        run: |
+          echo "Action: ${{ steps.action.outputs.action }}"
+          FINAL_STATUS=$(openstack server show ${{ steps.vm.outputs.id }} -f value -c status)
+          echo "Final VM status: $FINAL_STATUS"
+        env:
+          OS_AUTH_URL: "https://auth.cloud.ovh.net/v3"
+          OS_DOMAIN_NAME: "default"
+          OS_TENANT_ID: ${{ secrets.OPENSTACK_TENANT_ID }}
+          OS_USERNAME: ${{ secrets.OPENSTACK_USERNAME }}
+          OS_PASSWORD: ${{ secrets.OPENSTACK_PASSWORD }}
+          OS_REGION_NAME: "GRA11"
