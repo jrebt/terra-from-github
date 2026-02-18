@@ -12,6 +12,6 @@ spec:
         name: http
         protocol: HTTP
       hosts:
-        - "argocd.NEW_IP.nip.io"
-        - "events.NEW_IP.nip.io"
-        - "uptime.NEW_IP.nip.io"
+        - "argocd.92.222.102.13.nip.io"
+        - "events.92.222.102.13.nip.io"
+        - "uptime.92.222.102.13.nip.io"
