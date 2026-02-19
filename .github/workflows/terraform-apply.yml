@@ -9,6 +9,10 @@ on:
 permissions:
   contents: read
 
+defaults:
+  run:
+    working-directory: ./providers/ovh/terraform
+
 jobs:
   terraform-apply:
     name: 'Terraform Apply'

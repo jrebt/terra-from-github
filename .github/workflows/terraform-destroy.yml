@@ -11,6 +11,10 @@ on:
 permissions:
   contents: read
 
+defaults:
+  run:
+    working-directory: ./providers/ovh/terraform
+
 jobs:
   terraform-destroy:
     name: 'Terraform Destroy'
