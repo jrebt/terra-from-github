@@ -35,9 +35,29 @@ jobs:
 
       - name: Terraform Init
         run: terraform init
+        env:
+          TF_VAR_ovh_endpoint: ${{ secrets.OVH_ENDPOINT }}
+          TF_VAR_ovh_application_key: ${{ secrets.OVH_APPLICATION_KEY }}
+          TF_VAR_ovh_application_secret: ${{ secrets.OVH_APPLICATION_SECRET }}
+          TF_VAR_ovh_consumer_key: ${{ secrets.OVH_CONSUMER_KEY }}
+          TF_VAR_service_name: ${{ secrets.OVH_SERVICE_NAME }}
+          TF_VAR_ssh_public_key: ${{ secrets.OVH_SSH_PUBLIC_KEY }}
+          TF_VAR_openstack_tenant_id: ${{ secrets.OPENSTACK_TENANT_ID }}
+          TF_VAR_openstack_username: ${{ secrets.OPENSTACK_USERNAME }}
+          TF_VAR_openstack_password: ${{ secrets.OPENSTACK_PASSWORD }}
 
       - name: Terraform Destroy
         run: terraform destroy -auto-approve
+        env:
+          TF_VAR_ovh_endpoint: ${{ secrets.OVH_ENDPOINT }}
+          TF_VAR_ovh_application_key: ${{ secrets.OVH_APPLICATION_KEY }}
+          TF_VAR_ovh_application_secret: ${{ secrets.OVH_APPLICATION_SECRET }}
+          TF_VAR_ovh_consumer_key: ${{ secrets.OVH_CONSUMER_KEY }}
+          TF_VAR_service_name: ${{ secrets.OVH_SERVICE_NAME }}
+          TF_VAR_ssh_public_key: ${{ secrets.OVH_SSH_PUBLIC_KEY }}
+          TF_VAR_openstack_tenant_id: ${{ secrets.OPENSTACK_TENANT_ID }}
+          TF_VAR_openstack_username: ${{ secrets.OPENSTACK_USERNAME }}
+          TF_VAR_openstack_password: ${{ secrets.OPENSTACK_PASSWORD }}
 
       - name: Confirmation
         run: echo "✅ Infraestructura destruida correctamente"

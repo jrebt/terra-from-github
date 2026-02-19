@@ -20,6 +20,7 @@
   shell: kubectl -n {{ argocd_namespace }} get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d
   register: argocd_password
   changed_when: false
+  no_log: true
 
 - name: Get ArgoCD server NodePort
   shell: kubectl get svc argocd-server -n {{ argocd_namespace }} -o jsonpath='{.spec.ports[?(@.name=="https")].nodePort}'
@@ -32,4 +33,4 @@
       - "ArgoCD is installed!"
       - "Access URL: https://{{ ansible_host }}:{{ argocd_nodeport.stdout }}"
       - "Username: admin"
-      - "Password: {{ argocd_password.stdout }}"
+      - "Password: Retrieve with: kubectl -n {{ argocd_namespace }} get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d"
