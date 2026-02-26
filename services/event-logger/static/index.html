@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JetStream Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <h1>NATS JetStream Dashboard</h1>
+        <div id="server-status">
+            <span id="status-dot" class="dot disconnected"></span>
+            <span id="status-text">Connecting...</span>
+        </div>
+    </header>
+
+    <nav>
+        <button class="tab active" data-tab="overview">Overview</button>
+        <button class="tab" data-tab="streams">Streams</button>
+        <button class="tab" data-tab="consumers">Consumers</button>
+        <button class="tab" data-tab="publish">Publish</button>
+        <button class="tab" data-tab="live">Live Events</button>
+    </nav>
+
+    <!-- Overview -->
+    <section id="overview" class="panel active">
+        <h2>Server Overview</h2>
+        <div class="cards">
+            <div class="card">
+                <div class="card-title">Status</div>
+                <div class="card-value" id="ov-status">--</div>
+            </div>
+            <div class="card">
+                <div class="card-title">Streams</div>
+                <div class="card-value" id="ov-streams">--</div>
+            </div>
+            <div class="card">
+                <div class="card-title">Consumers</div>
+                <div class="card-value" id="ov-consumers">--</div>
+            </div>
+            <div class="card">
+                <div class="card-title">Total Messages</div>
+                <div class="card-value" id="ov-messages">--</div>
+            </div>
+            <div class="card">
+                <div class="card-title">Total Bytes</div>
+                <div class="card-value" id="ov-bytes">--</div>
+            </div>
+            <div class="card">
+                <div class="card-title">Server URL</div>
+                <div class="card-value small" id="ov-url">--</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Streams -->
+    <section id="streams" class="panel">
+        <h2>Streams</h2>
+        <button class="btn" onclick="showCreateStream()">+ Create Stream</button>
+
+        <div id="create-stream-form" class="form-box hidden">
+            <h3>Create Stream</h3>
+            <div class="form-row">
+                <label>Name</label>
+                <input type="text" id="cs-name" placeholder="MY_STREAM">
+            </div>
+            <div class="form-row">
+                <label>Subjects (comma separated)</label>
+                <input type="text" id="cs-subjects" placeholder="orders.>, payments.>">
+            </div>
+            <div class="form-row">
+                <label>Storage</label>
+                <select id="cs-storage">
+                    <option value="file">File</option>
+                    <option value="memory">Memory</option>
+                </select>
+            </div>
+            <div class="form-row">
+                <label>Retention</label>
+                <select id="cs-retention">
+                    <option value="limits">Limits</option>
+                    <option value="interest">Interest</option>
+                    <option value="workqueue">WorkQueue</option>
+                </select>
+            </div>
+            <div class="form-row">
+                <label>Max Age</label>
+                <input type="text" id="cs-maxage" placeholder="24h" value="24h">
+            </div>
+            <div class="form-actions">
+                <button class="btn" onclick="createStream()">Create</button>
+                <button class="btn btn-cancel" onclick="hideCreateStream()">Cancel</button>
+            </div>
+        </div>
+
+        <table id="streams-table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Subjects</th>
+                    <th>Storage</th>
+                    <th>Retention</th>
+                    <th>Messages</th>
+                    <th>Bytes</th>
+                    <th>Consumers</th>
+                    <th>Max Age</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="streams-body"></tbody>
+        </table>
+    </section>
+
+    <!-- Consumers -->
+    <section id="consumers" class="panel">
+        <h2>Consumers</h2>
+        <div class="form-row inline">
+            <label>Stream:</label>
+            <select id="consumer-stream-select" onchange="loadConsumers()">
+                <option value="">Select a stream</option>
+            </select>
+            <button class="btn" onclick="showCreateConsumer()">+ Create Consumer</button>
+        </div>
+
+        <div id="create-consumer-form" class="form-box hidden">
+            <h3>Create Consumer</h3>
+            <div class="form-row">
+                <label>Name (Durable)</label>
+                <input type="text" id="cc-name" placeholder="my-consumer">
+            </div>
+            <div class="form-row">
+                <label>Filter Subject</label>
+                <input type="text" id="cc-filter" placeholder="events.>">
+            </div>
+            <div class="form-row">
+                <label>Ack Policy</label>
+                <select id="cc-ack">
+                    <option value="explicit">Explicit</option>
+                    <option value="none">None</option>
+                    <option value="all">All</option>
+                </select>
+            </div>
+            <div class="form-row">
+                <label>Deliver Policy</label>
+                <select id="cc-deliver">
+                    <option value="all">All</option>
+                    <option value="last">Last</option>
+                    <option value="new">New</option>
+                </select>
+            </div>
+            <div class="form-actions">
+                <button class="btn" onclick="createConsumer()">Create</button>
+                <button class="btn btn-cancel" onclick="hideCreateConsumer()">Cancel</button>
+            </div>
+        </div>
+
+        <table id="consumers-table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Stream</th>
+                    <th>Filter</th>
+                    <th>Ack Policy</th>
+                    <th>Pending</th>
+                    <th>Ack Pending</th>
+                    <th>Redelivered</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="consumers-body"></tbody>
+        </table>
+    </section>
+
+    <!-- Publish -->
+    <section id="publish" class="panel">
+        <h2>Publish Message</h2>
+        <div class="form-box">
+            <div class="form-row">
+                <label>Subject</label>
+                <input type="text" id="pub-subject" placeholder="events.order.created">
+            </div>
+            <div class="form-row">
+                <label>Data (JSON)</label>
+                <textarea id="pub-data" rows="6" placeholder='{"name": "order.created", "data": "test"}'></textarea>
+            </div>
+            <div class="form-actions">
+                <button class="btn" onclick="publishMessage()">Publish</button>
+            </div>
+            <div id="pub-result" class="result hidden"></div>
+        </div>
+    </section>
+
+    <!-- Live Events -->
+    <section id="live" class="panel">
+        <h2>Live Events <span id="ws-status" class="badge">disconnected</span></h2>
+        <div class="live-controls">
+            <button class="btn" id="ws-toggle" onclick="toggleWebSocket()">Connect</button>
+            <button class="btn btn-cancel" onclick="clearLiveEvents()">Clear</button>
+            <span id="live-count">0 events</span>
+        </div>
+        <div id="live-events" class="live-feed"></div>
+    </section>
+
+    <footer>
+        NATS JetStream Dashboard | Event Logger v2.0
+    </footer>
+
+    <div id="toast" class="toast hidden"></div>
+
+    <script src="app.js"></script>
+</body>
+</html>

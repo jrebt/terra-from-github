@@ -13,6 +13,7 @@ RUN apk --no-cache add ca-certificates
 
 WORKDIR /app
 COPY --from=builder /app/event-logger .
+COPY static/ ./static/
 
 EXPOSE 8080
 
