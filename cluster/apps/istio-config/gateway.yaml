@@ -12,7 +12,7 @@ spec:
         name: http
         protocol: HTTP
       hosts:
-        - "argocd.92.222.102.117.nip.io"
-        - "events.92.222.102.117.nip.io"
-        - "uptime.92.222.102.117.nip.io"
-        - "kiali.92.222.102.117.nip.io"
+        - "argocd.79.137.54.150.nip.io"
+        - "events.79.137.54.150.nip.io"
+        - "uptime.79.137.54.150.nip.io"
+        - "kiali.79.137.54.150.nip.io"

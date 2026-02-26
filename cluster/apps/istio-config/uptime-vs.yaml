@@ -5,7 +5,7 @@ metadata:
   namespace: istio-ingress
 spec:
   hosts:
-    - "uptime.92.222.102.117.nip.io"
+    - "uptime.79.137.54.150.nip.io"
   gateways:
     - main-gateway
   http:
