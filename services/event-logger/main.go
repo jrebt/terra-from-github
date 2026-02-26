@@ -394,7 +394,7 @@ func handleConsumers(w http.ResponseWriter, r *http.Request) {
 			"stream":         info.Stream,
 			"filter_subject": info.Config.FilterSubject,
 			"ack_policy":     info.Config.AckPolicy.String(),
-			"deliver_policy": info.Config.DeliverPolicy.String(),
+			"deliver_policy": deliverPolicyName(info.Config.DeliverPolicy),
 			"num_pending":    info.NumPending,
 			"num_ack_pending": info.NumAckPending,
 			"num_redelivered": info.NumRedelivered,
@@ -577,6 +577,21 @@ func handleServerInfo(w http.ResponseWriter, r *http.Request) {
 }
 
 // --- WebSocket ---
+
+func deliverPolicyName(p nats.DeliverPolicy) string {
+	switch p {
+	case nats.DeliverAllPolicy:
+		return "all"
+	case nats.DeliverLastPolicy:
+		return "last"
+	case nats.DeliverNewPolicy:
+		return "new"
+	case nats.DeliverLastPerSubjectPolicy:
+		return "last_per_subject"
+	default:
+		return "unknown"
+	}
+}
 
 func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
