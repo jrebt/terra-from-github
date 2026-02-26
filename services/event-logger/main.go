@@ -523,7 +523,13 @@ func handleAPIPublish(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ack, err := js.Publish(req.Subject, []byte(req.Data))
+	event := Event{
+		Name: req.Subject,
+		Data: req.Data,
+	}
+	data, _ := json.Marshal(event)
+
+	ack, err := js.Publish(req.Subject, data)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to publish: %v", err), http.StatusInternalServerError)
 		return
