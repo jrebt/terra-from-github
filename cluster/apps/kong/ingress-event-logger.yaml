@@ -14,7 +14,7 @@ metadata:
   name: event-logger
   annotations:
     konghq.com/strip-path: "false"
-    konghq.com/plugins: rate-limit-5rpm
+    konghq.com/plugins: rate-limit-5rpm,api-key-auth
 spec:
   ingressClassName: kong
   rules:
