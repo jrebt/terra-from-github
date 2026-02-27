@@ -1,30 +1,29 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: istio-ingressgateway
+  name: kong
   namespace: argocd
   annotations:
     argocd.argoproj.io/sync-wave: "-1"
 spec:
   project: default
   source:
-    repoURL: https://istio-release.storage.googleapis.com/charts
-    chart: gateway
-    targetRevision: 1.24.2
+    repoURL: https://charts.konghq.com
+    chart: kong
+    targetRevision: 2.44.0
     helm:
       valuesObject:
-        image:
-          repository: docker.io/istio/proxyv2
-          tag: 1.24.2
-        service:
+        ingressController:
+          enabled: true
+          installCRDs: false
+        proxy:
           type: LoadBalancer
-          ports:
-            - name: http2
-              port: 80
-              protocol: TCP
-            - name: https
-              port: 443
-              protocol: TCP
+          http:
+            enabled: true
+            containerPort: 8000
+            servicePort: 80
+          tls:
+            enabled: false
         resources:
           requests:
             cpu: 100m
@@ -32,9 +31,15 @@ spec:
           limits:
             cpu: 500m
             memory: 256Mi
+        env:
+          database: "off"
+          proxy_access_log: /dev/stdout
+          admin_access_log: /dev/stdout
+          proxy_error_log: /dev/stderr
+          admin_error_log: /dev/stderr
   destination:
     server: https://kubernetes.default.svc
-    namespace: istio-ingress
+    namespace: kong
   syncPolicy:
     automated:
       prune: true
