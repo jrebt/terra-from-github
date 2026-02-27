@@ -1,0 +1,24 @@
+{{- if .Values.keda.nats.enabled }}
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: {{ .Release.Name }}-nats
+  labels:
+    app: {{ .Release.Name }}
+spec:
+  scaleTargetRef:
+    name: {{ .Release.Name }}
+  pollingInterval: {{ .Values.keda.nats.pollingInterval }}
+  cooldownPeriod: {{ .Values.keda.nats.cooldownPeriod }}
+  minReplicaCount: {{ .Values.keda.nats.minReplicas }}
+  maxReplicaCount: {{ .Values.keda.nats.maxReplicas }}
+  triggers:
+    - type: nats-jetstream
+      metadata:
+        natsServerMonitoringEndpoint: {{ .Values.keda.nats.monitoringEndpoint | quote }}
+        account: "$G"
+        stream: {{ .Values.keda.nats.stream | quote }}
+        consumer: {{ .Values.keda.nats.consumer | quote }}
+        lagThreshold: {{ .Values.keda.nats.lagThreshold | quote }}
+        activationLagThreshold: {{ .Values.keda.nats.activationLagThreshold | quote }}
+{{- end }}

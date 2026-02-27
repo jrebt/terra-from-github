@@ -20,6 +20,17 @@ keda:
   enabled: true
   desiredReplicas: "1"
   timezone: "Europe/Madrid"
+  nats:
+    enabled: true
+    monitoringEndpoint: "nats.nats.svc.cluster.local:8222"
+    stream: "EVENTS"
+    consumer: "event-logger"
+    lagThreshold: "10"
+    activationLagThreshold: "5"
+    pollingInterval: 5
+    cooldownPeriod: 30
+    minReplicas: 1
+    maxReplicas: 5
 
 resources:
   requests:
