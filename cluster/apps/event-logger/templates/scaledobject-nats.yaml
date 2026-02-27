@@ -2,7 +2,7 @@
 apiVersion: keda.sh/v1alpha1
 kind: ScaledObject
 metadata:
-  name: {{ .Release.Name }}-nats
+  name: {{ .Release.Name }}-combined
   labels:
     app: {{ .Release.Name }}
 spec:
@@ -13,6 +13,12 @@ spec:
   minReplicaCount: {{ .Values.keda.nats.minReplicas }}
   maxReplicaCount: {{ .Values.keda.nats.maxReplicas }}
   triggers:
+    - type: cron
+      metadata:
+        timezone: {{ .Values.keda.timezone | quote }}
+        start: "0 9 * * 1-5"
+        end: "0 19 * * 1-5"
+        desiredReplicas: {{ .Values.keda.desiredReplicas | quote }}
     - type: nats-jetstream
       metadata:
         natsServerMonitoringEndpoint: {{ .Values.keda.nats.monitoringEndpoint | quote }}
