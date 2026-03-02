@@ -16,7 +16,7 @@ resource "openstack_networking_subnet_v2" "private" {
   ip_version      = 4
   dns_nameservers = ["213.186.33.99", "8.8.8.8"]
   allocation_pool {
-    start = cidrhost(var.subnet_cidr, 10)
+    start = cidrhost(var.subnet_cidr, 50)
     end   = cidrhost(var.subnet_cidr, 200)
   }
 }
