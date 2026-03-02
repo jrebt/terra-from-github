@@ -1,0 +1,120 @@
+name: 'Cleanup All OVH Resources'
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Escribe "cleanup" para confirmar la eliminacion de TODOS los recursos'
+        required: true
+        default: ''
+
+jobs:
+  cleanup:
+    name: 'Destroy all OpenStack resources'
+    runs-on: ubuntu-latest
+    if: github.event.inputs.confirm == 'cleanup'
+
+    env:
+      OS_AUTH_URL: "https://auth.cloud.ovh.net/v3"
+      OS_DOMAIN_NAME: "default"
+      OS_TENANT_ID: ${{ secrets.OPENSTACK_TENANT_ID }}
+      OS_USERNAME: ${{ secrets.OPENSTACK_USERNAME }}
+      OS_PASSWORD: ${{ secrets.OPENSTACK_PASSWORD }}
+      OS_REGION_NAME: "GRA11"
+      CLUSTER_NAME: "k3s-prod"
+
+    steps:
+      - name: Install OpenStack CLI
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-openstackclient
+
+      - name: List existing resources
+        run: |
+          echo "=== Servers ==="
+          openstack server list -f table || true
+          echo "=== Floating IPs ==="
+          openstack floating ip list -f table || true
+          echo "=== Routers ==="
+          openstack router list -f table || true
+          echo "=== Networks ==="
+          openstack network list -f table || true
+          echo "=== Security Groups ==="
+          openstack security group list -f table || true
+          echo "=== Keypairs ==="
+          openstack keypair list -f table || true
+
+      - name: Delete servers (VMs)
+        run: |
+          for server in $(openstack server list -f value -c Name | grep "^${CLUSTER_NAME}"); do
+            echo "Deleting server: $server"
+            openstack server delete --wait "$server" || true
+          done
+          echo "Waiting for servers to be fully deleted..."
+          sleep 10
+
+      - name: Delete floating IPs
+        run: |
+          for fip in $(openstack floating ip list -f value -c ID); do
+            echo "Deleting floating IP: $fip"
+            openstack floating ip delete "$fip" || true
+          done
+
+      - name: Delete router interfaces and router
+        run: |
+          ROUTER_ID=$(openstack router list -f value -c ID -c Name | grep "${CLUSTER_NAME}" | awk '{print $1}')
+          if [ -n "$ROUTER_ID" ]; then
+            for subnet in $(openstack router show "$ROUTER_ID" -f json | python3 -c "
+          import sys, json
+          data = json.load(sys.stdin)
+          for iface in data.get('interfaces_info', []):
+            print(iface.get('subnet_id', ''))
+          " 2>/dev/null); do
+              echo "Removing subnet $subnet from router"
+              openstack router remove subnet "$ROUTER_ID" "$subnet" || true
+            done
+            echo "Deleting router: $ROUTER_ID"
+            openstack router delete "$ROUTER_ID" || true
+          else
+            echo "No router found for ${CLUSTER_NAME}"
+          fi
+
+      - name: Delete subnets and networks
+        run: |
+          for net in $(openstack network list -f value -c ID -c Name | grep "${CLUSTER_NAME}" | awk '{print $1}'); do
+            for subnet in $(openstack subnet list --network "$net" -f value -c ID); do
+              echo "Deleting subnet: $subnet"
+              openstack subnet delete "$subnet" || true
+            done
+            echo "Deleting network: $net"
+            openstack network delete "$net" || true
+          done
+
+      - name: Delete security groups
+        run: |
+          for sg in $(openstack security group list -f value -c ID -c Name | grep "${CLUSTER_NAME}" | awk '{print $1}'); do
+            echo "Deleting security group: $sg"
+            openstack security group delete "$sg" || true
+          done
+
+      - name: Delete keypair
+        run: |
+          openstack keypair delete "${CLUSTER_NAME}-keypair" || echo "Keypair not found"
+
+      - name: Verify cleanup
+        run: |
+          echo "=== Remaining Resources ==="
+          echo "--- Servers ---"
+          openstack server list -f table || true
+          echo "--- Floating IPs ---"
+          openstack floating ip list -f table || true
+          echo "--- Routers ---"
+          openstack router list -f table || true
+          echo "--- Networks ---"
+          openstack network list -f table || true
+          echo "--- Security Groups ---"
+          openstack security group list -f table || true
+          echo "--- Keypairs ---"
+          openstack keypair list -f table || true
+          echo ""
+          echo "Cleanup complete!"

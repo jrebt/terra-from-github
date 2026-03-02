@@ -2,9 +2,7 @@
 name: 'Terraform Apply'
 
 on:
-  push:
-    branches:
-      - main
+  workflow_dispatch:  # Manual only - no remote state backend
 
 permissions:
   contents: read
