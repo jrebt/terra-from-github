@@ -39,24 +39,43 @@ jobs:
           ssh-keyscan -H ${{ github.event.inputs.bastion_ip }} >> ~/.ssh/known_hosts
 
       - name: Generate inventory
+        env:
+          BASTION_IP: ${{ github.event.inputs.bastion_ip }}
+          K3S_IP: ${{ github.event.inputs.k3s_master_ip }}
         run: |
           mkdir -p inventory
-          cat > inventory/hosts.yml << EOF
-          all:
-            children:
-              bastion:
-                hosts:
-                  k3s-prod-bastion:
-                    ansible_host: ${{ github.event.inputs.bastion_ip }}
-                    ansible_user: ubuntu
-              k3s_masters:
-                hosts:
-                  k3s-prod-master-1:
-                    ansible_host: ${{ github.event.inputs.k3s_master_ip }}
-                    ansible_user: ubuntu
-                    ansible_ssh_common_args: "-o StrictHostKeyChecking=accept-new -o ProxyJump=ubuntu@${{ github.event.inputs.bastion_ip }}"
-          EOF
-          cat inventory/hosts.yml
+          python3 - << 'PYEOF'
+import os, yaml
+bastion_ip = os.environ['BASTION_IP']
+k3s_ip     = os.environ['K3S_IP']
+proxy_cmd  = f"ssh -W %h:%p -i ~/.ssh/id_rsa -o StrictHostKeyChecking=accept-new ubuntu@{bastion_ip}"
+inventory = {
+    'all': {
+        'children': {
+            'bastion': {
+                'hosts': {
+                    'k3s-prod-bastion': {
+                        'ansible_host': bastion_ip,
+                        'ansible_user': 'ubuntu',
+                    }
+                }
+            },
+            'k3s_masters': {
+                'hosts': {
+                    'k3s-prod-master-1': {
+                        'ansible_host': k3s_ip,
+                        'ansible_user': 'ubuntu',
+                        'ansible_ssh_common_args': f'-o StrictHostKeyChecking=accept-new -o ProxyCommand="{proxy_cmd}"',
+                    }
+                }
+            }
+        }
+    }
+}
+with open('inventory/hosts.yml', 'w') as f:
+    yaml.dump(inventory, f, default_flow_style=False)
+print(open('inventory/hosts.yml').read())
+PYEOF
 
       - name: Wait for SSH to be available
         run: |
