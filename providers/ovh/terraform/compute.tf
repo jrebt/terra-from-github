@@ -22,19 +22,13 @@ module "network" {
   subnet_cidr  = var.subnet_cidr
 }
 
-module "security" {
-  source       = "./modules/security"
-  cluster_name = var.cluster_name
-  subnet_cidr  = var.subnet_cidr
-}
-
 module "bastion" {
   source             = "./modules/bastion"
   cluster_name       = var.cluster_name
   image_id           = data.openstack_images_image_v2.ubuntu.id
   flavor             = var.flavor_bastion
   keypair_name       = openstack_compute_keypair_v2.k3s_keypair.name
-  secgroup_name      = module.security.bastion_secgroup_name
+  secgroup_name      = "default"
   ext_net_name       = module.network.ext_net_name
   private_network_id = module.network.private_network_id
   ssh_public_key     = var.ssh_public_key
@@ -48,7 +42,7 @@ module "k3s" {
   image_id           = data.openstack_images_image_v2.ubuntu.id
   flavor             = var.flavor_master
   keypair_name       = openstack_compute_keypair_v2.k3s_keypair.name
-  secgroup_name      = module.security.k3s_secgroup_name
+  secgroup_name      = "default"
   private_network_id = module.network.private_network_id
   master_private_ip  = "10.0.0.10"
   ssh_public_key     = var.ssh_public_key
