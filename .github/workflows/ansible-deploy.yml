@@ -26,10 +26,33 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Ansible
+      - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y ansible
+          sudo apt-get install -y ansible python3-openstackclient
+
+      - name: Open SSH in security group
+        working-directory: .
+        env:
+          OS_AUTH_URL: "https://auth.cloud.ovh.net/v3"
+          OS_DOMAIN_NAME: "default"
+          OS_TENANT_ID: ${{ secrets.OPENSTACK_TENANT_ID }}
+          OS_USERNAME: ${{ secrets.OPENSTACK_USERNAME }}
+          OS_PASSWORD: ${{ secrets.OPENSTACK_PASSWORD }}
+          OS_REGION_NAME: "GRA11"
+        run: |
+          SG_ID=$(openstack security group show default -f value -c id)
+          echo "Default SG ID: $SG_ID"
+          openstack security group rule create \
+            --ingress --protocol tcp --dst-port 22 --remote-ip 0.0.0.0/0 \
+            "$SG_ID" 2>&1 | grep -v "already exists" || true
+          openstack security group rule create \
+            --ingress --protocol tcp --dst-port 80 --remote-ip 0.0.0.0/0 \
+            "$SG_ID" 2>&1 | grep -v "already exists" || true
+          openstack security group rule create \
+            --ingress --protocol tcp --dst-port 443 --remote-ip 0.0.0.0/0 \
+            "$SG_ID" 2>&1 | grep -v "already exists" || true
+          echo "Security group rules verified"
 
       - name: Setup SSH key
         run: |
