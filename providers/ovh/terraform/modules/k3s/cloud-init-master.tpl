@@ -12,12 +12,12 @@ packages:
   - ufw
 
 runcmd:
-  # Configurar firewall básico
   - ufw default deny incoming
   - ufw default allow outgoing
-  - ufw allow 22/tcp
-  - ufw allow 6443/tcp
+  - ufw allow from 10.0.0.0/24 to any port 22 proto tcp
+  - ufw allow from 10.0.0.0/24 to any port 6443 proto tcp
   - ufw allow 80/tcp
   - ufw allow 443/tcp
+  - ufw allow from 10.0.0.0/24
   - ufw --force enable
   - echo "Master node ${node_index} initialized" > /var/log/cloud-init-done.log
