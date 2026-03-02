@@ -31,7 +31,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ansible python3-openstackclient
 
-      - name: Check quota and security group rules
+      - name: Open ports in security group
         working-directory: .
         env:
           OS_AUTH_URL: "https://auth.cloud.ovh.net/v3"
@@ -41,25 +41,36 @@ jobs:
           OS_PASSWORD: ${{ secrets.OPENSTACK_PASSWORD }}
           OS_REGION_NAME: "GRA11"
         run: |
-          echo "=== VM Status ==="
-          openstack server list -f table -c Name -c Status -c Networks
-          echo ""
-          echo "=== Security Group Rule Quota ==="
-          openstack quota show --detail 2>/dev/null | grep -i "security_group_rule\|secgroup_rule" || \
-            openstack quota show 2>/dev/null | grep -i "security_group_rule\|secgroup" || \
-            echo "Could not get quota"
-          echo ""
-          echo "=== ALL Security Group Rules in project ==="
-          openstack security group rule list --all-projects -f table \
-            -c "Security Group" -c Direction -c Protocol -c "Port Range" -c "Remote IP Prefix" \
-            2>/dev/null || openstack security group rule list -f table \
-            -c Direction -c Protocol -c "Port Range" -c "Remote IP Prefix"
-          echo ""
-          echo "=== Attempting to add SSH rule ==="
           SG_ID=$(openstack security group show default -f value -c id)
-          openstack security group rule create \
-            --ingress --protocol tcp --dst-port 22 --remote-ip 0.0.0.0/0 \
-            "$SG_ID" 2>&1 || echo "FAILED to add SSH rule"
+          echo "Default SG ID: $SG_ID"
+          echo "=== Current rules ==="
+          openstack security group rule list "$SG_ID" -f table \
+            -c id -c Direction -c Ethertype -c Protocol -c "Port Range" -c "Remote IP Prefix"
+          echo ""
+          echo "=== Freeing quota: removing IPv6 rules ==="
+          IPV6_RULES=$(openstack security group rule list "$SG_ID" -f value \
+            -c id -c Ethertype | grep -i ipv6 | awk '{print $1}')
+          for rule_id in $IPV6_RULES; do
+            echo "Deleting IPv6 rule: $rule_id"
+            openstack security group rule delete "$rule_id" && echo "  Deleted OK" || echo "  Could not delete"
+          done
+          echo ""
+          echo "=== Adding required rules ==="
+          for port in 22 80 443; do
+            RULE_EXISTS=$(openstack security group rule list "$SG_ID" -f value \
+              -c Protocol -c "Port Range" -c Direction | grep "tcp.*${port}:${port}.*ingress" || true)
+            if [ -n "$RULE_EXISTS" ]; then
+              echo "Port $port already open"
+            else
+              openstack security group rule create \
+                --ingress --protocol tcp --dst-port $port --remote-ip 0.0.0.0/0 \
+                "$SG_ID" && echo "Port $port opened" || echo "Warning: could not open port $port"
+            fi
+          done
+          echo ""
+          echo "=== Final rules ==="
+          openstack security group rule list "$SG_ID" -f table \
+            -c Direction -c Ethertype -c Protocol -c "Port Range" -c "Remote IP Prefix"
 
       - name: Setup SSH key
         run: |
@@ -74,7 +85,7 @@ jobs:
           K3S_IP: ${{ github.event.inputs.k3s_master_ip }}
         run: |
           mkdir -p inventory
-          PROXY="ssh -W %h:%p -i ~/.ssh/id_rsa -o StrictHostKeyChecking=accept-new ubuntu@${BASTION_IP}"
+          PROXY="ssh -W %h:22 -i ~/.ssh/id_rsa -o StrictHostKeyChecking=accept-new ubuntu@${BASTION_IP}"
           {
             echo "all:"
             echo "  children:"
