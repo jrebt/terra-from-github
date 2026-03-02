@@ -1,0 +1,62 @@
+---
+- name: Install kubectl
+  shell: |
+    curl -LO "https://dl.k8s.io/release/$(curl -Ls https://dl.k8s.io/release/stable.txt)/bin/linux/{{ k9s_arch }}/kubectl"
+    install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+    rm -f kubectl
+  args:
+    creates: /usr/local/bin/kubectl
+
+- name: Install k9s
+  shell: |
+    curl -sL "https://github.com/derailed/k9s/releases/download/{{ k9s_version }}/k9s_Linux_{{ k9s_arch }}.tar.gz" \
+      -o /tmp/k9s.tar.gz
+    tar -xzf /tmp/k9s.tar.gz -C /tmp k9s
+    install -o root -g root -m 0755 /tmp/k9s /usr/local/bin/k9s
+    rm -f /tmp/k9s.tar.gz /tmp/k9s
+  args:
+    creates: /usr/local/bin/k9s
+
+- name: Create .kube directory for ubuntu
+  file:
+    path: /home/ubuntu/.kube
+    state: directory
+    owner: ubuntu
+    group: ubuntu
+    mode: '0755'
+
+- name: Copy kubeconfig from master (fetched to controller)
+  copy:
+    src: /tmp/k3s-kubeconfig
+    dest: /home/ubuntu/.kube/config
+    owner: ubuntu
+    group: ubuntu
+    mode: '0600'
+
+- name: Update kubeconfig server URL to master private IP
+  replace:
+    path: /home/ubuntu/.kube/config
+    regexp: 'https://127\.0\.0\.1:6443'
+    replace: "https://{{ k3s_master_private_ip }}:6443"
+
+- name: Verify k9s installation
+  command: k9s version
+  register: k9s_ver
+  changed_when: false
+
+- name: Show k9s version
+  debug:
+    var: k9s_ver.stdout_lines
+
+- name: Verify kubectl can reach cluster
+  command: kubectl get nodes
+  become: false
+  become_user: ubuntu
+  environment:
+    KUBECONFIG: /home/ubuntu/.kube/config
+  register: nodes
+  changed_when: false
+
+- name: Show cluster nodes
+  debug:
+    var: nodes.stdout_lines

@@ -39,16 +39,24 @@ output "ssh_config" {
 }
 
 output "ansible_inventory" {
-  description = "Inventario Ansible (acceso via bastion)"
+  description = "Inventario Ansible (bastion + k3s masters via ProxyJump)"
   value = yamlencode({
     all = {
       children = {
+        bastion = {
+          hosts = {
+            (module.bastion.name) = {
+              ansible_host = module.bastion.public_ip
+              ansible_user = "ubuntu"
+            }
+          }
+        }
         k3s_masters = {
           hosts = {
             (module.k3s.master_name) = {
-              ansible_host                = module.k3s.master_private_ip
-              ansible_user                = "ubuntu"
-              ansible_ssh_common_args     = "-o ProxyJump=ubuntu@${module.bastion.public_ip}"
+              ansible_host            = module.k3s.master_private_ip
+              ansible_user            = "ubuntu"
+              ansible_ssh_common_args = "-o ProxyJump=ubuntu@${module.bastion.public_ip}"
             }
           }
         }

@@ -1,0 +1,18 @@
+---
+# Paso 1: copiar kubeconfig del master al controller (runner de CI)
+- name: Fetch kubeconfig from K3s master
+  hosts: k3s_masters[0]
+  become: yes
+  tasks:
+    - name: Fetch kubeconfig to controller
+      fetch:
+        src: /home/ubuntu/.kube/config
+        dest: /tmp/k3s-kubeconfig
+        flat: yes
+
+# Paso 2: instalar k9s en bastion y configurar acceso al cluster
+- name: Setup bastion with k9s and kubeconfig
+  hosts: bastion
+  become: yes
+  roles:
+    - bastion-tools

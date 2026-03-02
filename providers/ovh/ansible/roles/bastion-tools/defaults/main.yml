@@ -1,0 +1,4 @@
+---
+k9s_version: v0.32.7
+k9s_arch: amd64
+k3s_master_private_ip: "10.0.0.10"
