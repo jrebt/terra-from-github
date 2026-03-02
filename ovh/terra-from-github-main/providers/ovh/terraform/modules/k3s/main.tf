@@ -24,7 +24,7 @@ resource "openstack_networking_floatingip_v2" "k3s_web" {
   pool = "Ext-Net"
 }
 
-resource "openstack_compute_floatingip_associate_v2" "k3s_web" {
+resource "openstack_networking_floatingip_associate_v2" "k3s_web" {
   floating_ip = openstack_networking_floatingip_v2.k3s_web.address
-  instance_id = openstack_compute_instance_v2.master.id
+  port_id     = openstack_compute_instance_v2.master.network[0].port
 }
