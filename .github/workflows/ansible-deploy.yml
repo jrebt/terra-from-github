@@ -106,11 +106,21 @@ jobs:
       - name: Wait for SSH to be available
         run: |
           echo "Waiting for bastion SSH..."
+          SSH_OK=0
           for i in $(seq 1 20); do
-            ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=accept-new \
-              -o ConnectTimeout=5 ubuntu@${{ github.event.inputs.bastion_ip }} \
-              "echo OK" && break || sleep 15
+            echo "Attempt $i/20..."
+            if ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=accept-new \
+              -o ConnectTimeout=10 ubuntu@${{ github.event.inputs.bastion_ip }} \
+              "echo SSH_CONNECTED"; then
+              SSH_OK=1
+              break
+            fi
+            sleep 15
           done
+          if [ "$SSH_OK" -eq 0 ]; then
+            echo "ERROR: Could not connect to bastion after 20 attempts. Check security group rules."
+            exit 1
+          fi
 
       - name: Install K3s
         run: ansible-playbook playbooks/k3s-install.yml
