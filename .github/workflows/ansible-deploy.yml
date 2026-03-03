@@ -31,7 +31,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ansible python3-openstackclient
 
-      - name: Open ports in security group
+      - name: Attach permissive security group to VMs
         working-directory: .
         env:
           OS_AUTH_URL: "https://auth.cloud.ovh.net/v3"
@@ -41,36 +41,43 @@ jobs:
           OS_PASSWORD: ${{ secrets.OPENSTACK_PASSWORD }}
           OS_REGION_NAME: "GRA11"
         run: |
-          SG_ID=$(openstack security group show default -f value -c id)
-          echo "Default SG ID: $SG_ID"
-          echo "=== Current rules ==="
-          openstack security group rule list "$SG_ID" -f table \
-            -c id -c Direction -c Ethertype -c Protocol -c "Port Range" -c "Remote IP Prefix"
+          echo "=== All security groups in project ==="
+          openstack security group list -f table -c ID -c Name
           echo ""
-          echo "=== Freeing quota: removing IPv6 rules ==="
-          IPV6_RULES=$(openstack security group rule list "$SG_ID" -f value \
-            -c id -c Ethertype | grep -i ipv6 | awk '{print $1}')
-          for rule_id in $IPV6_RULES; do
-            echo "Deleting IPv6 rule: $rule_id"
-            openstack security group rule delete "$rule_id" && echo "  Deleted OK" || echo "  Could not delete"
-          done
+          echo "=== Current SGs per VM ==="
+          openstack server show k3s-prod-bastion -f value -c security_groups
+          openstack server show k3s-prod-master-1 -f value -c security_groups
           echo ""
-          echo "=== Adding required rules ==="
-          for port in 22 80 443; do
-            RULE_EXISTS=$(openstack security group rule list "$SG_ID" -f value \
-              -c Protocol -c "Port Range" -c Direction | grep "tcp.*${port}:${port}.*ingress" || true)
-            if [ -n "$RULE_EXISTS" ]; then
-              echo "Port $port already open"
-            else
-              openstack security group rule create \
-                --ingress --protocol tcp --dst-port $port --remote-ip 0.0.0.0/0 \
-                "$SG_ID" && echo "Port $port opened" || echo "Warning: could not open port $port"
+          echo "=== Finding open security group (with ingress any rule) ==="
+          OPEN_SG=""
+          for sg_id in $(openstack security group list -f value -c ID); do
+            HAS_OPEN=$(openstack security group rule list "$sg_id" -f value \
+              -c Direction -c Protocol -c "Port Range" -c "Remote IP Prefix" \
+              2>/dev/null | grep "ingress.*None.*None.*0.0.0.0/0" || true)
+            if [ -n "$HAS_OPEN" ]; then
+              OPEN_SG="$sg_id"
+              echo "Found open SG: $sg_id"
+              break
             fi
           done
           echo ""
-          echo "=== Final rules ==="
-          openstack security group rule list "$SG_ID" -f table \
-            -c Direction -c Ethertype -c Protocol -c "Port Range" -c "Remote IP Prefix"
+          if [ -n "$OPEN_SG" ]; then
+            echo "=== Attaching open SG $OPEN_SG to VMs ==="
+            openstack server add security group k3s-prod-bastion "$OPEN_SG" \
+              && echo "Bastion: SG added" || echo "Bastion: SG already attached or error"
+            openstack server add security group k3s-prod-master-1 "$OPEN_SG" \
+              && echo "Master: SG added" || echo "Master: SG already attached or error"
+          else
+            echo "No open SG found, trying by known ID: 308cb304-eafa-4b99-b677-313858695d67"
+            openstack server add security group k3s-prod-bastion \
+              "308cb304-eafa-4b99-b677-313858695d67" || echo "Bastion: error or already attached"
+            openstack server add security group k3s-prod-master-1 \
+              "308cb304-eafa-4b99-b677-313858695d67" || echo "Master: error or already attached"
+          fi
+          echo ""
+          echo "=== Updated SGs per VM ==="
+          openstack server show k3s-prod-bastion -f value -c security_groups
+          openstack server show k3s-prod-master-1 -f value -c security_groups
 
       - name: Setup SSH key
         run: |
