@@ -18,6 +18,7 @@ resource "openstack_compute_instance_v2" "bastion" {
   }
 
   user_data = templatefile("${path.module}/cloud-init.tpl", {
-    ssh_public_key = var.ssh_public_key
+    ssh_public_key     = var.ssh_public_key
+    tailscale_auth_key = var.tailscale_auth_key
   })
 }

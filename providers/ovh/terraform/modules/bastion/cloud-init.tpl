@@ -14,4 +14,6 @@ runcmd:
   - ufw default allow outgoing
   - ufw allow 22/tcp
   - ufw --force enable
-  - echo "Bastion initialized" > /var/log/cloud-init-done.log
+  - curl -fsSL https://tailscale.com/install.sh | sh
+  - tailscale up --authkey=${tailscale_auth_key} --hostname=k3s-prod-bastion --accept-routes --ssh
+  - echo "Bastion initialized with Tailscale" > /var/log/cloud-init-done.log

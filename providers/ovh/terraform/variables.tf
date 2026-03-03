@@ -112,3 +112,9 @@ variable "worker_count" {
   type        = number
   default     = 0
 }
+
+variable "tailscale_auth_key" {
+  description = "Tailscale auth key for bastion (reusable)"
+  type        = string
+  sensitive   = true
+}

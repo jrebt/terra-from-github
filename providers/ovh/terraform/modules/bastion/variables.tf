@@ -30,3 +30,9 @@ variable "private_network_id" {
 variable "ssh_public_key" {
   type = string
 }
+
+variable "tailscale_auth_key" {
+  description = "Tailscale auth key for bastion"
+  type        = string
+  sensitive   = true
+}

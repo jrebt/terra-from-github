@@ -72,6 +72,7 @@ module "bastion" {
   ext_net_name       = module.network.ext_net_name
   private_network_id = module.network.private_network_id
   ssh_public_key     = var.ssh_public_key
+  tailscale_auth_key = var.tailscale_auth_key
 
   depends_on = [module.network]
 }

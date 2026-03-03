@@ -38,6 +38,7 @@ jobs:
           TF_VAR_openstack_tenant_id: ${{ secrets.OPENSTACK_TENANT_ID }}
           TF_VAR_openstack_username: ${{ secrets.OPENSTACK_USERNAME }}
           TF_VAR_openstack_password: ${{ secrets.OPENSTACK_PASSWORD }}
+          TF_VAR_tailscale_auth_key: ${{ secrets.TAILSCALE_AUTH_KEY }}
 
       - name: Terraform Plan
         run: terraform plan -out=tfplan
@@ -51,6 +52,7 @@ jobs:
           TF_VAR_openstack_tenant_id: ${{ secrets.OPENSTACK_TENANT_ID }}
           TF_VAR_openstack_username: ${{ secrets.OPENSTACK_USERNAME }}
           TF_VAR_openstack_password: ${{ secrets.OPENSTACK_PASSWORD }}
+          TF_VAR_tailscale_auth_key: ${{ secrets.TAILSCALE_AUTH_KEY }}
 
       - name: Terraform Apply
         run: terraform apply -auto-approve tfplan
@@ -64,6 +66,7 @@ jobs:
           TF_VAR_openstack_tenant_id: ${{ secrets.OPENSTACK_TENANT_ID }}
           TF_VAR_openstack_username: ${{ secrets.OPENSTACK_USERNAME }}
           TF_VAR_openstack_password: ${{ secrets.OPENSTACK_PASSWORD }}
+          TF_VAR_tailscale_auth_key: ${{ secrets.TAILSCALE_AUTH_KEY }}
 
       - name: Terraform Output
         id: output

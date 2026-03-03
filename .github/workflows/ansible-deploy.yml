@@ -3,9 +3,6 @@ name: 'Ansible Deploy'
 on:
   workflow_dispatch:
     inputs:
-      bastion_ip:
-        description: 'Bastion public IP (from Terraform output)'
-        required: true
       k3s_master_ip:
         description: 'K3s master private IP'
         required: true
@@ -29,52 +26,33 @@ jobs:
       - name: Install Ansible
         run: |
           sudo apt-get update
-          sudo apt-get install -y ansible python3-openstackclient
+          sudo apt-get install -y ansible
 
-      - name: Fix security group (GRA11)
+      - name: Setup Tailscale on runner
+        uses: tailscale/github-action@v3
+        with:
+          authkey: ${{ secrets.TAILSCALE_AUTH_KEY }}
+          version: latest
+
+      - name: Wait for bastion on Tailscale
         working-directory: .
-        env:
-          OS_AUTH_URL: "https://auth.cloud.ovh.net/v3"
-          OS_DOMAIN_NAME: "default"
-          OS_TENANT_ID: ${{ secrets.OPENSTACK_TENANT_ID }}
-          OS_USERNAME: ${{ secrets.OPENSTACK_USERNAME }}
-          OS_PASSWORD: ${{ secrets.OPENSTACK_PASSWORD }}
-          OS_REGION_NAME: "GRA11"
         run: |
-          echo "=== Security groups in GRA11 ==="
-          openstack security group list -f table -c ID -c Name
-          echo ""
-          echo "=== VMs and their current SGs ==="
-          for vm in k3s-prod-bastion k3s-prod-master-1; do
-            echo "--- $vm ---"
-            openstack server show "$vm" -f value -c security_groups
-          done
-          echo ""
-          echo "=== Looking for SG with all-allow ingress ==="
-          for sg_id in $(openstack security group list -f value -c ID); do
-            RULES=$(openstack security group rule list "$sg_id" -f value \
-              -c Direction -c Protocol -c "Remote IP Prefix" 2>/dev/null)
-            if echo "$RULES" | grep -q "ingress.*None.*0.0.0.0/0"; then
-              echo "Found permissive SG: $sg_id"
-              echo "$RULES"
-              OPEN_SG="$sg_id"
+          echo "Waiting for k3s-prod-bastion to appear on Tailscale..."
+          for i in $(seq 1 30); do
+            BASTION_IP=$(tailscale status --json 2>/dev/null | \
+              jq -r '.Peer | to_entries[] | .value | select(.HostName == "k3s-prod-bastion") | .TailscaleIPs[0]' \
+              2>/dev/null || echo "")
+            if [ -n "$BASTION_IP" ] && [ "$BASTION_IP" != "null" ]; then
+              echo "Bastion found at Tailscale IP: $BASTION_IP"
+              echo "BASTION_TS_IP=$BASTION_IP" >> $GITHUB_ENV
               break
             fi
+            echo "Attempt $i/30: bastion not yet visible, waiting 10s..."
+            sleep 10
           done
-          echo ""
-          if [ -n "$OPEN_SG" ]; then
-            echo "Attaching SG $OPEN_SG to VMs..."
-            openstack server add security group k3s-prod-bastion "$OPEN_SG" && \
-              echo "Bastion OK" || echo "Bastion: already attached"
-            openstack server add security group k3s-prod-master-1 "$OPEN_SG" && \
-              echo "Master OK" || echo "Master: already attached"
-          else
-            echo "No permissive SG found in GRA11. List all SG rules:"
-            for sg_id in $(openstack security group list -f value -c ID); do
-              echo "--- SG $sg_id ---"
-              openstack security group rule list "$sg_id" -f table \
-                -c Direction -c Ethertype -c Protocol -c "Port Range" -c "Remote IP Prefix"
-            done
+          if [ -z "$BASTION_TS_IP" ]; then
+            echo "ERROR: bastion k3s-prod-bastion not found in Tailscale after 5 minutes"
+            tailscale status
             exit 1
           fi
 
@@ -83,22 +61,26 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.OVH_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -T 10 -H ${{ github.event.inputs.bastion_ip }} >> ~/.ssh/known_hosts 2>&1 || true
+          ssh-keyscan -T 10 -H $BASTION_TS_IP >> ~/.ssh/known_hosts 2>&1 || true
+
+      - name: Test SSH to bastion
+        run: |
+          ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=accept-new \
+            -o ConnectTimeout=10 ubuntu@$BASTION_TS_IP "echo 'SSH OK via Tailscale'"
 
       - name: Generate inventory
         env:
-          BASTION_IP: ${{ github.event.inputs.bastion_ip }}
           K3S_IP: ${{ github.event.inputs.k3s_master_ip }}
         run: |
           mkdir -p inventory
-          PROXY="ssh -W %h:22 -i ~/.ssh/id_rsa -o StrictHostKeyChecking=accept-new ubuntu@${BASTION_IP}"
+          PROXY="ssh -W %h:22 -i ~/.ssh/id_rsa -o StrictHostKeyChecking=accept-new ubuntu@${BASTION_TS_IP}"
           {
             echo "all:"
             echo "  children:"
             echo "    bastion:"
             echo "      hosts:"
             echo "        k3s-prod-bastion:"
-            echo "          ansible_host: ${BASTION_IP}"
+            echo "          ansible_host: ${BASTION_TS_IP}"
             echo "          ansible_user: ubuntu"
             echo "    k3s_masters:"
             echo "      hosts:"
@@ -108,26 +90,6 @@ jobs:
             echo "          ansible_ssh_common_args: \"-o StrictHostKeyChecking=accept-new -o ProxyCommand='${PROXY}'\""
           } > inventory/hosts.yml
           cat inventory/hosts.yml
-
-      - name: Wait for SSH to be available
-        run: |
-          echo "Waiting for bastion SSH..."
-          SSH_OK=0
-          for i in $(seq 1 12); do
-            echo "Attempt $i/12..."
-            if ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=accept-new \
-              -o ConnectTimeout=10 ubuntu@${{ github.event.inputs.bastion_ip }} \
-              "echo SSH_CONNECTED"; then
-              SSH_OK=1
-              break
-            fi
-            sleep 10
-          done
-          if [ "$SSH_OK" -eq 0 ]; then
-            echo "ERROR: Cannot reach bastion ${{ github.event.inputs.bastion_ip }}:22"
-            echo "Check that security group allows SSH from 0.0.0.0/0"
-            exit 1
-          fi
 
       - name: Install K3s
         run: ansible-playbook playbooks/k3s-install.yml
