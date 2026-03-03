@@ -29,7 +29,54 @@ jobs:
       - name: Install Ansible
         run: |
           sudo apt-get update
-          sudo apt-get install -y ansible
+          sudo apt-get install -y ansible python3-openstackclient
+
+      - name: Fix security group (GRA11)
+        working-directory: .
+        env:
+          OS_AUTH_URL: "https://auth.cloud.ovh.net/v3"
+          OS_DOMAIN_NAME: "default"
+          OS_TENANT_ID: ${{ secrets.OPENSTACK_TENANT_ID }}
+          OS_USERNAME: ${{ secrets.OPENSTACK_USERNAME }}
+          OS_PASSWORD: ${{ secrets.OPENSTACK_PASSWORD }}
+          OS_REGION_NAME: "GRA11"
+        run: |
+          echo "=== Security groups in GRA11 ==="
+          openstack security group list -f table -c ID -c Name
+          echo ""
+          echo "=== VMs and their current SGs ==="
+          for vm in k3s-prod-bastion k3s-prod-master-1; do
+            echo "--- $vm ---"
+            openstack server show "$vm" -f value -c security_groups
+          done
+          echo ""
+          echo "=== Looking for SG with all-allow ingress ==="
+          for sg_id in $(openstack security group list -f value -c ID); do
+            RULES=$(openstack security group rule list "$sg_id" -f value \
+              -c Direction -c Protocol -c "Remote IP Prefix" 2>/dev/null)
+            if echo "$RULES" | grep -q "ingress.*None.*0.0.0.0/0"; then
+              echo "Found permissive SG: $sg_id"
+              echo "$RULES"
+              OPEN_SG="$sg_id"
+              break
+            fi
+          done
+          echo ""
+          if [ -n "$OPEN_SG" ]; then
+            echo "Attaching SG $OPEN_SG to VMs..."
+            openstack server add security group k3s-prod-bastion "$OPEN_SG" && \
+              echo "Bastion OK" || echo "Bastion: already attached"
+            openstack server add security group k3s-prod-master-1 "$OPEN_SG" && \
+              echo "Master OK" || echo "Master: already attached"
+          else
+            echo "No permissive SG found in GRA11. List all SG rules:"
+            for sg_id in $(openstack security group list -f value -c ID); do
+              echo "--- SG $sg_id ---"
+              openstack security group rule list "$sg_id" -f table \
+                -c Direction -c Ethertype -c Protocol -c "Port Range" -c "Remote IP Prefix"
+            done
+            exit 1
+          fi
 
       - name: Setup SSH key
         run: |
