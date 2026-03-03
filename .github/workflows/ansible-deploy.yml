@@ -38,15 +38,17 @@ jobs:
         working-directory: .
         run: |
           echo "Waiting for k3s-prod-bastion to appear on Tailscale (online)..."
+          BASTION_TS_IP=""
           for i in $(seq 1 30); do
-            BASTION_IP=$(tailscale status --json 2>/dev/null | \
+            BASTION_TS_IP=$(tailscale status --json 2>/dev/null | \
               jq -r '[.Peer | to_entries[] | .value | select(.HostName == "k3s-prod-bastion" and .Online == true) | .TailscaleIPs[0]] | first' \
               2>/dev/null || echo "")
-            if [ -n "$BASTION_IP" ] && [ "$BASTION_IP" != "null" ]; then
-              echo "Bastion found at Tailscale IP: $BASTION_IP"
-              echo "BASTION_TS_IP=$BASTION_IP" >> $GITHUB_ENV
+            if [ -n "$BASTION_TS_IP" ] && [ "$BASTION_TS_IP" != "null" ]; then
+              echo "Bastion found at Tailscale IP: $BASTION_TS_IP"
+              echo "BASTION_TS_IP=$BASTION_TS_IP" >> $GITHUB_ENV
               break
             fi
+            BASTION_TS_IP=""
             echo "Attempt $i/30: bastion not yet online, waiting 10s..."
             sleep 10
           done
