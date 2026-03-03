@@ -37,22 +37,22 @@ jobs:
       - name: Wait for bastion on Tailscale
         working-directory: .
         run: |
-          echo "Waiting for k3s-prod-bastion to appear on Tailscale..."
+          echo "Waiting for k3s-prod-bastion to appear on Tailscale (online)..."
           for i in $(seq 1 30); do
             BASTION_IP=$(tailscale status --json 2>/dev/null | \
-              jq -r '.Peer | to_entries[] | .value | select(.HostName == "k3s-prod-bastion") | .TailscaleIPs[0]' \
+              jq -r '[.Peer | to_entries[] | .value | select(.HostName == "k3s-prod-bastion" and .Online == true) | .TailscaleIPs[0]] | first' \
               2>/dev/null || echo "")
             if [ -n "$BASTION_IP" ] && [ "$BASTION_IP" != "null" ]; then
               echo "Bastion found at Tailscale IP: $BASTION_IP"
               echo "BASTION_TS_IP=$BASTION_IP" >> $GITHUB_ENV
               break
             fi
-            echo "Attempt $i/30: bastion not yet visible, waiting 10s..."
+            echo "Attempt $i/30: bastion not yet online, waiting 10s..."
             sleep 10
           done
           if [ -z "$BASTION_TS_IP" ]; then
             echo "ERROR: bastion k3s-prod-bastion not found in Tailscale after 5 minutes"
-            tailscale status
+            tailscale status --json | jq '.Peer | to_entries[] | .value | {name: .HostName, ip: .TailscaleIPs[0], online: .Online}'
             exit 1
           fi
 
